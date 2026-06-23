@@ -18,6 +18,11 @@ Environment="PATH=/home/ec2-user/.local/bin:/usr/local/bin:/usr/bin" "PYTHONPATH
 Environment=PORT=5001
 Environment=REDIS_URL=redis://localhost:6379/1
 Environment=RQ_QUEUE=tfc
+# Point at the TFC form's response Sheet (NOT Schnurr's). Required.
+Environment=SPREADSHEET_ID=REPLACE_WITH_TFC_RESPONSE_SHEET_ID
+# Override only if the sheet's headers differ from these defaults:
+# Environment=BUILDING_COLUMN=Building
+# Environment=PRICE_COLUMN=Price Estimate
 ExecStart=/usr/bin/python3 app.py
 Restart=always
 RestartSec=5

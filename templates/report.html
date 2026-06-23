@@ -145,8 +145,8 @@
           </tr>
           <tr>
             <td style="border:1px solid #dee2e6; padding:8px;">
-              <strong>Floor/Room:</strong><br>
-              {{ record.floor }}{% if record.floor and record.room %}, {% endif %}{{ record.room }}
+              <strong>Building / Floor / Room:</strong><br>
+              {{ record.building }}{% if record.building and (record.floor or record.room) %} · {% endif %}{{ record.floor }}{% if record.floor and record.room %}, {% endif %}{{ record.room }}
             </td>
             <td style="border:1px solid #dee2e6; padding:8px; text-align:right;">
               <strong>Reported by:</strong><br>
@@ -178,15 +178,15 @@
             {% endfor %}
           </td>
           <td style="border:1px solid #dee2e6; background-color:#e9ecef; padding:10px; width:35%; vertical-align:top;">
-            <h5 style="margin:0 0 6px 0; font-weight:bold; font-size:0.95rem;">Estimated Cost:</h5>
-            <p style="margin:0; font-weight:bold; font-size:0.9rem;">${{ record.cost }}</p>
+            <h5 style="margin:0 0 6px 0; font-weight:bold; font-size:0.95rem;">Price Estimate:</h5>
+            <p style="margin:0; font-weight:bold; font-size:0.9rem;">{% if record.cost %}${{ record.cost }}{% else %}<span style="color:#b8860b;">Not yet priced</span>{% endif %}</p>
           </td>
         </tr>
       </table>
       {% else %}
       <div class="cost-box">
-        <h5>Estimated Cost:</h5>
-        <p>${{ record.cost }}</p>
+        <h5>Price Estimate:</h5>
+        <p>{% if record.cost %}${{ record.cost }}{% else %}<span style="color:#b8860b;">Not yet priced</span>{% endif %}</p>
       </div>
       {% endif %}
 

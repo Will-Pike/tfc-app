@@ -57,7 +57,38 @@ REDIS_URL=redis://localhost:6379/1 RQ_QUEUE=tfc python worker.py &
 
 - `service-account.json` — Google service-account key (Sheets/Drive).
 - `client_secret.json` + `token.pickle` — Google OAuth (Drive photo upload).
-- `app_config.json` — projects, Google Form URL, field IDs, obs counters.
+- `app_config.json` — project, buildings, Google Form URL + prefill field IDs.
+
+## TFC customization
+
+This fork is scoped to a single project (TFC) with location-aware OBS IDs and
+operator-entered pricing. Behavior:
+
+- **No project dropdown** — the app is locked to the `project` in `app_config.json`.
+- **Building + Floor** are chosen on the home page. The Floor list is contextual
+  (Lavaca = 7 floors, North Congress = 4), driven by the `buildings` map.
+- **OBS ID** is composed as `{id_prefix}-{building_code}{floor}-{seq}`, e.g.
+  `TFC-L3-1`. `seq` is the next sequential number across the whole project
+  (derived from the sheet); the location prefix is cosmetic/contextual.
+- **Pricing** is no longer computed from a work-type index. The form has a
+  blank-allowed **Price Estimate** field; `Issue:` is now a free-text
+  description. Reports show "Not yet priced" when blank.
+- **Edit / Price view** lists every OBS, badges those with no price as
+  **"Needs price"** (highlighted), and has a "show only needs pricing" filter.
+
+### Config checklist (once the new Google Form + response Sheet exist)
+
+1. **`app_config.json`** — set `form_url` and the prefill field entry IDs
+   (`obs_field_id`, `project_field_id`, `building_field_id`, `floor_field_id`,
+   `room_field_id`, `user_field_id`). Get them from the form's *"Get pre-filled
+   link"* feature. See `app_config.example.json`.
+2. **`SPREADSHEET_ID`** — set in the `tfc-web`/`tfc-worker` service units to the
+   TFC form's response Sheet (not Schnurr's).
+3. **Sheet columns** — the response Sheet must have a **`Building`** column and a
+   **`Price Estimate`** column (or override `BUILDING_COLUMN`/`PRICE_COLUMN` env
+   to match your headers). `Issue:`, `Floor:`, `Room:`, etc. stay as-is.
+4. The form's Building/Floor questions should accept the values the app sends
+   (building names exactly as in `buildings`; floor as a number).
 
 ## Relationship to Schnurr
 

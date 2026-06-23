@@ -1,0 +1,26 @@
+{
+  "project": "TFC",
+  "id_prefix": "TFC",
+
+  "form_url": "https://docs.google.com/forms/d/e/REPLACE_WITH_TFC_FORM_ID/viewform",
+
+  "_comment_field_ids": "Prefill entry IDs from the NEW TFC Google Form. Get them from the form's 'Get pre-filled link' feature, then paste the entry.NNNN values here. Leave a value empty/omitted to skip prefilling that field.",
+  "obs_field_id": "entry.OBS_ID_FIELD",
+  "project_field_id": "entry.PROJECT_FIELD",
+  "building_field_id": "entry.BUILDING_FIELD",
+  "floor_field_id": "entry.FLOOR_FIELD",
+  "room_field_id": "entry.ROOM_FIELD",
+  "user_field_id": "entry.USER_FIELD",
+
+  "_comment_buildings": "Each building's single-letter code (used in the OBS ID) and floor count (drives the contextual Floor dropdown).",
+  "buildings": {
+    "Lavaca": { "code": "L", "floors": 7 },
+    "North Congress": { "code": "C", "floors": 4 }
+  },
+
+  "_comment_columns": "Exact column header names in the linked response Sheet. 'Building' and 'price' are the new columns; the rest of the schema reuses the existing headers.",
+  "columns": {
+    "building": "Building",
+    "price": "Price Estimate"
+  }
+}

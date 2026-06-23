@@ -17,6 +17,10 @@ WorkingDirectory=/home/ec2-user/tfc-app
 Environment="PATH=/home/ec2-user/.local/bin:/usr/local/bin:/usr/bin" "PYTHONPATH=/home/ec2-user/.local/lib/python3.9/site-packages"
 Environment=REDIS_URL=redis://localhost:6379/1
 Environment=RQ_QUEUE=tfc
+# Must match tfc-web exactly so reports read/write the same TFC sheet.
+Environment=SPREADSHEET_ID=REPLACE_WITH_TFC_RESPONSE_SHEET_ID
+# Environment=BUILDING_COLUMN=Building
+# Environment=PRICE_COLUMN=Price Estimate
 ExecStart=/usr/bin/python3 worker.py
 Restart=always
 RestartSec=5

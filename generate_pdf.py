@@ -4,7 +4,6 @@ import shutil
 import tempfile
 import requests
 import gspread
-from weasyprint import HTML
 from PIL import Image, ImageFile
 from PyPDF2 import PdfMerger
 from jinja2 import Environment, FileSystemLoader
@@ -32,8 +31,16 @@ import io
 from googleapiclient.http import MediaIoBaseUpload
 import time
 
-SERVICE_FILE = "./service-account.json"
-SPREADSHEET_ID = "16xuo0Uuyku5qD5Ul6VDO86I3rVSFzUedgVXMKfUv5CE"
+SERVICE_FILE = os.getenv("SERVICE_FILE", "./service-account.json")
+# Response Sheet for the TFC form. Override via env so this fork points at the
+# TFC sheet rather than Schnurr's.
+SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "16xuo0Uuyku5qD5Ul6VDO86I3rVSFzUedgVXMKfUv5CE")
+
+# Column header names in the response Sheet. Building and price are new for TFC;
+# the description stays in the existing "Issue:" column. Override via env if the
+# new form's headers differ.
+BUILDING_COLUMN = os.getenv("BUILDING_COLUMN", "Building")
+PRICE_COLUMN = os.getenv("PRICE_COLUMN", "Price Estimate")
 
 # Debug mode - set to False in production to avoid filling disk
 DEBUG_HTML = os.getenv('DEBUG_HTML', 'False').lower() == 'true'
@@ -77,8 +84,6 @@ def generate_report_for_project(project, start_date=None, end_date=None):
 
     pdf_files = []
 
-    price_dict = load_price_dictionary()
-    
     if rows:
         # Show ALL project values in the sheet
         project_values = {}
@@ -160,12 +165,14 @@ def generate_report_for_project(project, start_date=None, end_date=None):
     with tempfile.TemporaryDirectory() as temp_dir:
         for idx, row in enumerate(matching_rows):
             issue_type = row.get("Issue:", "")
-            cost = price_dict.get(issue_type, row.get("Estimated Cost", "N/A"))
+            # Price is now entered directly on the form (blank allowed); no index lookup.
+            cost = row.get(PRICE_COLUMN, "")
 
             record = {
                 "project": row.get("Project", ""),
                 "obs_number": row.get("OBS ID#", "N/A"),
                 "date": row.get("Timestamp", ""),
+                "building": row.get(BUILDING_COLUMN, ""),
                 "floor": row.get("Floor:", ""),
                 "room": row.get("Room:", ""),
                 "user": row.get("User:", ""),
@@ -175,10 +182,10 @@ def generate_report_for_project(project, start_date=None, end_date=None):
                 "photo_paths": [],  # Changed to list for multiple photos
                 "additional_fields": {}  # Store any additional form fields
             }
-            
+
             # Capture all additional fields that aren't in the standard set
-            standard_fields = {"Project", "OBS ID#", "Timestamp", "Floor:", "Room:", "User:", 
-                             "Issue:", "Who is responsible?", "Upload photo:", "Estimated Cost"}
+            standard_fields = {"Project", "OBS ID#", "Timestamp", BUILDING_COLUMN, "Floor:", "Room:", "User:",
+                             "Issue:", "Who is responsible?", "Upload photo:", "Estimated Cost", PRICE_COLUMN}
             for key, value in row.items():
                 if key not in standard_fields and value:  # Only include non-empty additional fields
                     record["additional_fields"][key] = value
@@ -221,6 +228,9 @@ def generate_report_for_project(project, start_date=None, end_date=None):
 
             output_file = os.path.join(temp_dir, f"report_{idx+1}.pdf")
             try:
+                # Imported lazily: only the RQ worker renders PDFs, so the web
+                # process can run without WeasyPrint's native libs installed.
+                from weasyprint import HTML
                 HTML(string=html_content, base_url=".").write_pdf(output_file)
                 pdf_files.append(output_file)
                 
@@ -314,18 +324,6 @@ def generate_report_for_project(project, start_date=None, end_date=None):
 
         return output_path
 
-def load_price_dictionary():
-    PRICE_SHEET_ID = "1DBpjjmtaiUeGV_eeCwrihEOBrDk8aRKdDUQERFQBLRA"
-    PRICE_SHEET_NAME = "Sheet1"
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_FILE, scope)
-    client = gspread.authorize(creds)
-    sheet = client.open_by_key(PRICE_SHEET_ID).worksheet(PRICE_SHEET_NAME)
-    rows = sheet.get_all_records()
-    # Build a dictionary: {issue_type: cost}
-    price_dict = {row["Issue Type"]: row["Cost Estimate"] for row in rows}
-    return price_dict
-
 def generate_csv_for_project(project, start_date=None, end_date=None):
     """Generate CSV file for a project with optional date range"""
     import csv
@@ -335,10 +333,7 @@ def generate_csv_for_project(project, start_date=None, end_date=None):
     creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_FILE, scope)
     client = gspread.authorize(creds)
     sheet = client.open_by_key(SPREADSHEET_ID).sheet1
-    
-    # Load price dictionary for cost lookup
-    price_dict = load_price_dictionary()
-    
+
     # Get all rows and headers
     all_data = sheet.get_all_values()
     if not all_data:
@@ -359,21 +354,6 @@ def generate_csv_for_project(project, start_date=None, end_date=None):
         timestamp_col_idx = headers.index("Timestamp")
     except ValueError:
         pass  # If no timestamp column, skip date filtering
-    
-    # Find issue type column index for cost lookup
-    issue_col_idx = None
-    try:
-        issue_col_idx = headers.index("Issue:")
-    except ValueError:
-        pass  # If no issue column, skip cost lookup
-    
-    # Check if Estimated Cost column already exists
-    cost_col_idx = None
-    try:
-        cost_col_idx = headers.index("Estimated Cost")
-    except ValueError:
-        # Add Estimated Cost column if it doesn't exist
-        headers = list(headers) + ["Estimated Cost"]
     
     # Parse date range if provided
     start_dt = None
@@ -405,29 +385,9 @@ def generate_csv_for_project(project, start_date=None, end_date=None):
                     continue
                 if end_dt and row_dt > end_dt:
                     continue
-        
-        # Add or update estimated cost
-        row = list(row)  # Convert to list so we can modify it
-        
-        if cost_col_idx is None:
-            # Add new cost column
-            if issue_col_idx is not None and len(row) > issue_col_idx:
-                issue_type = row[issue_col_idx]
-                cost = price_dict.get(issue_type, "N/A")
-                row.append(str(cost))
-            else:
-                row.append("N/A")
-        else:
-            # Update existing cost column
-            if issue_col_idx is not None and len(row) > issue_col_idx:
-                issue_type = row[issue_col_idx]
-                cost = price_dict.get(issue_type, row[cost_col_idx] if len(row) > cost_col_idx else "N/A")
-                # Ensure row is long enough for cost column
-                while len(row) <= cost_col_idx:
-                    row.append("")
-                row[cost_col_idx] = str(cost)
-        
-        filtered_rows.append(row)
+
+        # Price is a real column in the sheet now, so rows are exported as-is.
+        filtered_rows.append(list(row))
     
     if not filtered_rows:
         raise FileNotFoundError(f"No records found for project: {project} in the specified date range")
@@ -496,15 +456,6 @@ def generate_both_reports(project, start_date, end_date):
         'pdf_path': pdf_path,
         'csv_path': csv_path
     }
-
-def get_all_issue_types():
-    """Get all issue types and their costs from the Patch Cost Estimates spreadsheet"""
-    try:
-        price_dict = load_price_dictionary()
-        return price_dict
-    except Exception as e:
-        print(f"Error getting issue types: {e}")
-        return {}
 
 def get_report_record_count(project):
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -577,16 +528,20 @@ def get_obs_list_for_project(project):
         obs_list = []
         for idx, row in enumerate(rows):
             if row.get("Project", "") == project:
+                price = str(row.get(PRICE_COLUMN, "") or "").strip()
                 obs_list.append({
                     "row_index": idx + 2,  # +2 because sheets are 1-indexed and we skip header
                     "obs_id": row.get("OBS ID#", ""),
                     "date": row.get("Timestamp", ""),
+                    "building": row.get(BUILDING_COLUMN, ""),
                     "floor": row.get("Floor:", ""),
                     "room": row.get("Room:", ""),
                     "issue": row.get("Issue:", ""),
-                    "user": row.get("User:", "")
+                    "user": row.get("User:", ""),
+                    "price": price,
+                    "needs_price": price == ""
                 })
-        
+
         # Sort by OBS ID descending (newest first)
         obs_list.sort(key=lambda x: str(x.get("obs_id", "")), reverse=True)
         return obs_list
@@ -624,16 +579,18 @@ def get_obs_details(project, obs_id):
                     "obs_id": row.get("OBS ID#", ""),
                     "timestamp": row.get("Timestamp", ""),
                     "user": row.get("User:", ""),
+                    "building": row.get(BUILDING_COLUMN, ""),
                     "floor": row.get("Floor:", ""),
                     "room": row.get("Room:", ""),
                     "issue": row.get("Issue:", ""),
                     "responsible": row.get("Who is responsible?", ""),
+                    "price": row.get(PRICE_COLUMN, ""),
                     "photo_url": photo_url
                 }
-                
+
                 # Add any additional fields dynamically
-                standard_fields = {"Project", "OBS ID#", "Timestamp", "Floor:", "Room:", "User:", 
-                                 "Issue:", "Who is responsible?", "Upload photo:", "Estimated Cost", "row_index"}
+                standard_fields = {"Project", "OBS ID#", "Timestamp", BUILDING_COLUMN, "Floor:", "Room:", "User:",
+                                 "Issue:", "Who is responsible?", "Upload photo:", "Estimated Cost", PRICE_COLUMN, "row_index"}
                 for key, value in row.items():
                     if key not in standard_fields and value:
                         response[key] = value
@@ -669,12 +626,16 @@ def update_obs_in_spreadsheet(project, obs_id, updated_data):
                 # Update the fields using the column mapping
                 if 'user' in updated_data and 'User:' in column_map:
                     sheet.update_cell(row_index, column_map['User:'], updated_data['user'])
+                if 'building' in updated_data and BUILDING_COLUMN in column_map:
+                    sheet.update_cell(row_index, column_map[BUILDING_COLUMN], updated_data['building'])
                 if 'floor' in updated_data and 'Floor:' in column_map:
                     sheet.update_cell(row_index, column_map['Floor:'], updated_data['floor'])
                 if 'room' in updated_data and 'Room:' in column_map:
                     sheet.update_cell(row_index, column_map['Room:'], updated_data['room'])
                 if 'issue' in updated_data and 'Issue:' in column_map:
                     sheet.update_cell(row_index, column_map['Issue:'], updated_data['issue'])
+                if 'price' in updated_data and PRICE_COLUMN in column_map:
+                    sheet.update_cell(row_index, column_map[PRICE_COLUMN], updated_data['price'])
                 if 'responsible' in updated_data and 'Who is responsible?' in column_map:
                     sheet.update_cell(row_index, column_map['Who is responsible?'], updated_data['responsible'])
                 # Handle photo URL updates if needed

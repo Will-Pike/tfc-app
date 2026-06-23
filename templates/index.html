@@ -3,77 +3,64 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Construction Inspection OBS Generator</title>
+  <title>TFC Inspection OBS Generator</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body {
-      padding: 20px;
-      background-color: #f8f9fa;
-    }
-    .container {
-      max-width: 700px;
-      margin: 0 auto;
-    }
-    .obs-number {
-      font-size: 3rem;
-      font-weight: bold;
-      color: #0d6efd;
-      text-align: center;
-      margin: 20px 0;
-    }
-    .obs-text {
-      font-size: 1.5rem;
-      font-weight: bold;
-      color: #000000;
-      text-align: center;
-      margin: 20px 0;
-    }
-    .btn-primary, .btn-success, .btn-danger, .btn-info, .btn-warning {
-      width: 100%;
-      margin-top: 10px;
-    }
-    .status {
-      margin-top: 15px;
-      text-align: center;
-    }
-    .pdf-button {
-        margin-top: 1vh;
-        width: 100%;
-    }
-    
+    body { padding: 20px; background-color: #f8f9fa; }
+    .container { max-width: 700px; margin: 0 auto; }
+    .obs-text { font-size: 1.25rem; font-weight: bold; color: #000; text-align: center; margin-top: 20px; }
+    .obs-number { font-size: 2.75rem; font-weight: bold; color: #0d6efd; text-align: center; margin: 8px 0 20px; }
+    .obs-number.muted { color: #adb5bd; font-size: 1.5rem; }
+    .btn-primary, .btn-success, .btn-danger, .btn-info, .btn-warning, .btn-secondary { width: 100%; margin-top: 10px; }
+    .status { margin-top: 15px; text-align: center; }
+    .pdf-button { margin-top: 1vh; width: 100%; }
   </style>
 </head>
 <body>
 <div class="container">
-  <h1 class="text-center mb-4">Construction Inspection</h1>
+  <h1 class="text-center mb-1">TFC Inspection</h1>
+  <p class="text-center text-muted mb-4">Project: {{ project }}</p>
 
   <div class="card mb-4">
     <div class="card-body">
-      <div class="mb-3">
-        <label for="projectSelect" class="form-label">Select Project:</label>
-        <select id="projectSelect" class="form-select" onchange="updateOBSDisplay()"></select>
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label for="buildingSelect" class="form-label">Building:</label>
+          <select id="buildingSelect" class="form-select" onchange="onBuildingChange()">
+            <option value="">Select building...</option>
+            {% for name in buildings.keys() %}
+            <option value="{{ name }}">{{ name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6 mb-3">
+          <label for="floorSelect" class="form-label">Floor:</label>
+          <select id="floorSelect" class="form-select" onchange="updateOBSDisplay()" disabled>
+            <option value="">Select building first</option>
+          </select>
+        </div>
       </div>
 
-      <div class="obs-text">Next OBS Number:</div>
-      <div class="obs-number" id="obsNumber">Loading...</div>
+      <div class="obs-text">Next OBS ID:</div>
+      <div class="obs-number muted" id="obsNumber">Select building &amp; floor</div>
 
-      <a href="#" class="btn btn-success" id="formButton" style="display:none;" target="_blank" onclick="startObservationReport(event)">Start Observation Report</a>
-      <!-- <a href="/open_foreman_form" class="btn btn-success" target="_blank">Start Foreman Field Report</a> -->
+      <a href="#" class="btn btn-success" id="formButton" target="_blank"
+         onclick="startObservationReport(event)" style="pointer-events:none; opacity:0.5;">
+         Start Observation Report
+      </a>
+
       <button class="btn btn-secondary pdf-button" onclick="showDateRangePicker()">Generate Reports</button>
       <div id="reportStatus" class="status"></div>
-      
-      <!-- Download Section (hidden by default) -->
-      <div id="downloadSection" style="display:none; margin-top:20px;">
-        <div id="downloadMessage" class="alert alert-success" role="alert">
-          Reports are ready for download!
-        </div>
-        <a href="#" id="downloadPdfBtn" class="btn btn-primary" style="display:block !important; width:100% !important; margin-bottom:15px !important;" download>Download PDF Report</a>
-        <a href="#" id="downloadCsvBtn" class="btn btn-info" style="display:block !important; width:100% !important; margin-top:15px !important;" download>Download Spreadsheet Report</a>
-      </div>
-      
-      <a href="/edit_obs" class="btn btn-warning">Edit an OBS Report</a>
 
-      <div id="progressContainer" style="display:none;">
+      <div id="downloadSection" style="display:none; margin-top:20px;">
+        <div id="downloadMessage" class="alert alert-success" role="alert">Reports are ready for download!</div>
+        <a href="#" id="downloadPdfBtn" class="btn btn-primary" style="display:block; width:100%; margin-bottom:15px;" download>Download PDF Report</a>
+        <a href="#" id="downloadCsvBtn" class="btn btn-info" style="display:block; width:100%; margin-top:15px;" download>Download Spreadsheet Report</a>
+      </div>
+
+      <a href="/edit_obs" class="btn btn-warning">Edit / Price OBS Reports</a>
+
+      <div id="progressContainer" style="display:none; margin-top:15px;">
         <div style="background:#eee; width:100%; height:24px; border-radius:12px;">
           <div id="progressBar" style="background:#0d6efd; width:0%; height:24px; border-radius:12px; transition:width 0.2s;"></div>
         </div>
@@ -84,11 +71,11 @@
 </div>
 
 <!-- Date Range Picker Modal -->
-<div class="modal fade" id="dateRangeModal" tabindex="-1" aria-labelledby="dateRangeModalLabel" aria-hidden="true">
+<div class="modal fade" id="dateRangeModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="dateRangeModalLabel">Select Date Range</h5>
+        <h5 class="modal-title">Select Date Range</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
@@ -117,263 +104,139 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-  loadProjects();
-});
+const PROJECT = {{ project|tojson }};
+const BUILDINGS = {{ buildings|tojson }};
 
-function loadProjects() {
-  fetch('/get_projects')
-    .then(response => response.json())
-    .then(data => {
-      const select = document.getElementById('projectSelect');
-      select.innerHTML = '';
-      
-      data.projects.forEach(project => {
-        const option = document.createElement('option');
-        option.value = project;
-        option.textContent = project;
-        select.appendChild(option);
-      });
-      
-      // Get last row data to determine default project
-      fetch('/get_last_row_data')
-        .then(response => {
-          if (response.ok) {
-            return response.json();
-          } else {
-            throw new Error('No last row data');
-          }
-        })
-        .then(lastRowData => {
-          // Set default project from last row data
-          if (lastRowData && lastRowData.project && data.projects.includes(lastRowData.project)) {
-            select.value = lastRowData.project;
-          } else if (data.projects.length > 0) {
-            select.value = data.projects[0];
-          }
-          updateOBSDisplay();
-        })
-        .catch(error => {
-          console.log('Using first project as default:', error);
-          if (data.projects.length > 0) {
-            select.value = data.projects[0];
-          }
-          updateOBSDisplay();
-        });
-    });
+function onBuildingChange() {
+  const building = document.getElementById('buildingSelect').value;
+  const floorSelect = document.getElementById('floorSelect');
+  floorSelect.innerHTML = '';
+
+  if (!building || !BUILDINGS[building]) {
+    floorSelect.disabled = true;
+    floorSelect.innerHTML = '<option value="">Select building first</option>';
+    updateOBSDisplay();
+    return;
+  }
+
+  const floors = BUILDINGS[building].floors || 0;
+  floorSelect.disabled = false;
+  floorSelect.innerHTML = '<option value="">Select floor...</option>';
+  for (let f = 1; f <= floors; f++) {
+    const opt = document.createElement('option');
+    opt.value = f;
+    opt.textContent = 'Floor ' + f;
+    floorSelect.appendChild(opt);
+  }
+  updateOBSDisplay();
 }
 
-// Modify the updateOBSDisplay function to get last row data
 function updateOBSDisplay() {
-  const project = document.getElementById('projectSelect').value;
-  if (!project) return;
-  
-  fetch(`/get_current_obs?project=${encodeURIComponent(project)}`)
-    .then(response => response.json())
+  const building = document.getElementById('buildingSelect').value;
+  const floor = document.getElementById('floorSelect').value;
+  const obsEl = document.getElementById('obsNumber');
+  const btn = document.getElementById('formButton');
+
+  if (!building || !floor) {
+    obsEl.textContent = 'Select building & floor';
+    obsEl.classList.add('muted');
+    btn.style.pointerEvents = 'none';
+    btn.style.opacity = '0.5';
+    btn.removeAttribute('href');
+    return;
+  }
+
+  const params = new URLSearchParams({ project: PROJECT, building: building, floor: floor });
+  fetch('/get_current_obs?' + params.toString())
+    .then(r => r.json())
     .then(data => {
-      document.getElementById('obsNumber').textContent = data.obs_number;
-      document.getElementById('formButton').href = data.form_url;
-      document.getElementById('formButton').style.display = 'block';
-      
-      // Store last row data for use when starting observation
-      if (data.last_row_data) {
-        window.lastRowData = data.last_row_data;
+      if (data.error) { obsEl.textContent = 'Error'; return; }
+      obsEl.textContent = data.obs_id;
+      obsEl.classList.remove('muted');
+      if (data.form_url) {
+        btn.href = data.form_url;
+        btn.style.pointerEvents = 'auto';
+        btn.style.opacity = '1';
       }
     });
 }
 
-// Update the startObservationReport function to use last row data
 function startObservationReport(event) {
   event.preventDefault();
-  const project = document.getElementById('projectSelect').value;
-  
-  fetch(`/get_next_obs?project=${encodeURIComponent(project)}`)
-    .then(response => response.json())
+  const building = document.getElementById('buildingSelect').value;
+  const floor = document.getElementById('floorSelect').value;
+  if (!building || !floor) return;
+
+  // Re-fetch the latest sequence at click time so the ID is fresh.
+  const params = new URLSearchParams({ project: PROJECT, building: building, floor: floor });
+  fetch('/get_next_obs?' + params.toString())
+    .then(r => r.json())
     .then(data => {
-      // Build URL with last row data if available
-      let url = data.form_url;
-      if (window.lastRowData) {
-        const urlObj = new URL(url);
-        // Add the last row data as URL parameters
-        // You'll need to match these with your actual form field IDs
-        if (window.lastRowData.user) {
-          urlObj.searchParams.set('entry.USER_FIELD_ID', window.lastRowData.user);
-        }
-        if (window.lastRowData.floor) {
-          urlObj.searchParams.set('entry.FLOOR_FIELD_ID', window.lastRowData.floor);
-        }
-        if (window.lastRowData.room) {
-          urlObj.searchParams.set('entry.ROOM_FIELD_ID', window.lastRowData.room);
-        }
-        url = urlObj.toString();
+      if (data.form_url) {
+        window.open(data.form_url, '_blank');
+      } else {
+        alert('Form URL is not configured yet. Set form_url and field IDs in app_config.json.');
       }
-      
-      window.open(url, '_blank');
     });
 }
 
+/* ---- Report generation (date range -> PDF + CSV) ---- */
 let progressInterval;
 let progress = 0;
-let estimatedTime = 30; // seconds, will be set dynamically
-let reportRecordCount = null; // Add this at the top with your other variables
+let estimatedTime = 30;
 
 function startFakeProgressBar(recordCount) {
-  estimatedTime = Math.max(10, recordCount * 2); // e.g., 2 seconds per record, min 10s
+  estimatedTime = Math.max(10, recordCount * 2);
   progress = 0;
   document.getElementById('progressContainer').style.display = '';
   updateProgressBar();
   progressInterval = setInterval(() => {
-    if (progress < 99) {
-      progress += 100 / (estimatedTime * 2.7778); // update every 500ms
-      updateProgressBar();
-    }
+    if (progress < 99) { progress += 100 / (estimatedTime * 2.7778); updateProgressBar(); }
   }, 500);
 }
-
 function updateProgressBar() {
-  const bar = document.getElementById('progressBar');
-  const text = document.getElementById('progressText');
-  bar.style.width = Math.min(progress, 100) + '%';
-  text.textContent = Math.floor(Math.min(progress, 100)) + '%';
+  document.getElementById('progressBar').style.width = Math.min(progress, 100) + '%';
+  document.getElementById('progressText').textContent = Math.floor(Math.min(progress, 100)) + '%';
 }
+function finishProgressBar() { clearInterval(progressInterval); progress = 100; updateProgressBar(); }
 
-function finishProgressBar() {
-  clearInterval(progressInterval);
-  progress = 100;
-  updateProgressBar();
-}
-
-function generateReport() {
-  const project = document.getElementById('projectSelect').value;
-  document.getElementById('reportStatus').textContent = "Starting report generation...";
-  // Get record count first
-  fetch(`/get_report_count?project=${encodeURIComponent(project)}`)
-    .then(res => res.json())
-    .then(data => {
-      if (data.count !== undefined) {
-        reportRecordCount = data.count; // Store the count for later use
-        startFakeProgressBar(data.count);
-      }
-      // Now start the report generation
-      return fetch('/generate_report', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({project})
-      });
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.job_id) {
-        pollReportStatus(data.job_id);
-      } else {
-        document.getElementById('reportStatus').textContent = "Failed to start report.";
-        document.getElementById('progressContainer').style.display = 'none';
-      }
-    });
-}
-
-function pollReportStatus(job_id) {
-  fetch(`/report_status/${job_id}`)
-    .then(res => res.json())
-    .then(data => {
-      if (data.status === "finished") {
-        finishProgressBar();
-        document.getElementById('reportStatus').innerHTML =
-          `<a href="${data.download_url}">Download PDF Report</a>`;
-      } else if (data.status === "failed") {
-        document.getElementById('reportStatus').textContent = "Report generation failed.";
-        document.getElementById('progressContainer').style.display = 'none';
-      } else {
-        // Show the record count in the status message
-        let msg = "";
-        if (reportRecordCount !== null) {
-          msg = `${reportRecordCount} records found. `;
-        }
-        document.getElementById('reportStatus').textContent = msg + "Report is processing...";
-        setTimeout(() => pollReportStatus(job_id), 2000);
-      }
-    });
-}
-
-// New functions for date range picker
 let dateRangeModal;
-
 function showDateRangePicker() {
-  if (!dateRangeModal) {
-    dateRangeModal = new bootstrap.Modal(document.getElementById('dateRangeModal'));
-  }
-  
-  // Set default dates - today for end, 7 days ago for start
+  if (!dateRangeModal) dateRangeModal = new bootstrap.Modal(document.getElementById('dateRangeModal'));
   const today = new Date();
-  const sevenDaysAgo = new Date(today);
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  
+  const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7);
   document.getElementById('endDate').value = today.toISOString().split('T')[0];
-  document.getElementById('startDate').value = sevenDaysAgo.toISOString().split('T')[0];
+  document.getElementById('startDate').value = weekAgo.toISOString().split('T')[0];
   document.getElementById('endDate').max = today.toISOString().split('T')[0];
   document.getElementById('startDate').max = today.toISOString().split('T')[0];
-  
   dateRangeModal.show();
 }
-
 function setDateRange(days) {
-  const endDate = new Date();
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - days);
-  
-  document.getElementById('endDate').value = endDate.toISOString().split('T')[0];
-  document.getElementById('startDate').value = startDate.toISOString().split('T')[0];
+  const end = new Date(), start = new Date(); start.setDate(start.getDate() - days);
+  document.getElementById('endDate').value = end.toISOString().split('T')[0];
+  document.getElementById('startDate').value = start.toISOString().split('T')[0];
 }
-
 function confirmDateRange() {
   const startDate = document.getElementById('startDate').value;
   const endDate = document.getElementById('endDate').value;
-  const project = document.getElementById('projectSelect').value;
-  
-  if (!startDate || !endDate) {
-    alert('Please select both start and end dates');
-    return;
-  }
-  
-  if (new Date(startDate) > new Date(endDate)) {
-    alert('Start date must be before end date');
-    return;
-  }
-  
-  // Hide modal
+  if (!startDate || !endDate) { alert('Please select both start and end dates'); return; }
+  if (new Date(startDate) > new Date(endDate)) { alert('Start date must be before end date'); return; }
   dateRangeModal.hide();
-  
-  // Hide download section and reset status
   document.getElementById('downloadSection').style.display = 'none';
   document.getElementById('reportStatus').textContent = "Generating reports...";
   document.getElementById('progressContainer').style.display = '';
-  startFakeProgressBar(10); // Default estimate
-  
-  // Send request to generate both reports
+  startFakeProgressBar(10);
   fetch('/generate_reports', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({
-      project: project,
-      start_date: startDate,
-      end_date: endDate
-    })
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ project: PROJECT, start_date: startDate, end_date: endDate })
   })
   .then(res => res.json())
   .then(data => {
-    if (data.job_id) {
-      pollReportsStatus(data.job_id);
-    } else {
-      document.getElementById('reportStatus').textContent = "Failed to start report generation.";
-      document.getElementById('progressContainer').style.display = 'none';
-    }
+    if (data.job_id) { pollReportsStatus(data.job_id); }
+    else { document.getElementById('reportStatus').textContent = "Failed to start report generation."; document.getElementById('progressContainer').style.display = 'none'; }
   })
-  .catch(err => {
-    document.getElementById('reportStatus').textContent = "Error: " + err.message;
-    document.getElementById('progressContainer').style.display = 'none';
-  });
+  .catch(err => { document.getElementById('reportStatus').textContent = "Error: " + err.message; document.getElementById('progressContainer').style.display = 'none'; });
 }
-
 function pollReportsStatus(job_id) {
   fetch(`/reports_status/${job_id}`)
     .then(res => res.json())
@@ -382,8 +245,6 @@ function pollReportsStatus(job_id) {
         finishProgressBar();
         document.getElementById('reportStatus').textContent = "";
         document.getElementById('progressContainer').style.display = 'none';
-        
-        // Show download section
         document.getElementById('downloadSection').style.display = 'block';
         document.getElementById('downloadMessage').textContent = "Reports are ready for download!";
         document.getElementById('downloadPdfBtn').href = data.pdf_url;
@@ -399,13 +260,9 @@ function pollReportsStatus(job_id) {
           document.getElementById('downloadCsvBtn').href = data.csv_url;
         }
       } else if (data.status === "in_progress") {
-        // Use real progress if available
         if (data.progress !== undefined) {
-          clearInterval(progressInterval); // Stop fake progress
-          progress = data.progress;
-          updateProgressBar();
-          
-          // Show different message based on phase
+          clearInterval(progressInterval);
+          progress = data.progress; updateProgressBar();
           if (data.phase === 'merging_pdfs') {
             document.getElementById('reportStatus').textContent = `Merging PDFs into final report... (${data.processed}/${data.total} processed)`;
           } else {
@@ -420,19 +277,14 @@ function pollReportsStatus(job_id) {
           document.getElementById('downloadPdfBtn').style.display = 'none';
           document.getElementById('downloadCsvBtn').href = data.csv_url;
         }
-        setTimeout(() => pollReportsStatus(job_id), 1000); // Poll every second for smoother updates
+        setTimeout(() => pollReportsStatus(job_id), 1000);
       } else {
         document.getElementById('reportStatus').textContent = "Processing reports...";
         setTimeout(() => pollReportsStatus(job_id), 2000);
       }
     })
-    .catch(err => {
-      document.getElementById('reportStatus').textContent = "Error checking status: " + err.message;
-    });
+    .catch(err => { document.getElementById('reportStatus').textContent = "Error checking status: " + err.message; });
 }
-
 </script>
 </body>
 </html>
-
-
