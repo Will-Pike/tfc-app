@@ -1,0 +1,21 @@
+# Runtime state & secrets — never commit these
+app_config.json
+service-account.json
+
+# Generated artifacts
+debug_*.html
+combined_report_*.pdf
+*.pdf
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# OS / editor
+.DS_Store
+
+# Local Claude Code settings
+.claude/

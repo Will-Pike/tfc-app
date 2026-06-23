@@ -1,0 +1,8 @@
+Flask
+gunicorn
+requests
+gspread
+pdfkit
+PyPDF2
+jinja2
+oauth2client

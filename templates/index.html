@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Construction Inspection OBS Generator</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      padding: 20px;
+      background-color: #f8f9fa;
+    }
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+    }
+    .obs-number {
+      font-size: 3rem;
+      font-weight: bold;
+      color: #0d6efd;
+      text-align: center;
+      margin: 20px 0;
+    }
+    .btn-primary, .btn-success, .btn-danger {
+      width: 100%;
+      margin-top: 10px;
+    }
+    .status {
+      margin-top: 15px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1 class="text-center mb-4">Construction Inspection</h1>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="mb-3">
+        <label for="projectSelect" class="form-label">Select Project:</label>
+        <select id="projectSelect" class="form-select" onchange="updateOBSDisplay()"></select>
+      </div>
+
+      <div class="obs-number" id="obsNumber">Loading...</div>
+
+      <a href="#" class="btn btn-success" id="formButton" style="display:none;" target="_blank">Start Observation Report</a>
+      <a href="/open_foreman_form" class="btn btn-success" target="_blank">Start Foreman Field Report</a>
+      <button class="btn btn-secondary" onclick="generateReport()">Generate PDF Report</button>
+
+      <div class="status" id="statusDiv"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  loadProjects();
+});
+
+function loadProjects() {
+  fetch('/get_projects')
+    .then(res => res.json())
+    .then(data => {
+      const select = document.getElementById('projectSelect');
+      select.innerHTML = '';
+      data.projects.forEach(project => {
+        const opt = document.createElement('option');
+        opt.value = project;
+        opt.textContent = project;
+        select.appendChild(opt);
+      });
+      updateOBSDisplay();
+    })
+    .catch(err => console.error('Error loading projects:', err));
+}
+
+function updateOBSDisplay() {
+  const project = document.getElementById('projectSelect').value;
+  fetch(`/get_current_obs?project=${encodeURIComponent(project)}`)
+    .then(res => res.json())
+    .then(data => {
+      document.getElementById('obsNumber').textContent = data.obs_number;
+      const formBtn = document.getElementById('formButton');
+      formBtn.href = `/open_observation_form?project=${encodeURIComponent(project)}`;
+      formBtn.style.display = 'inline-block';
+    })
+    .catch(err => console.error('Error updating OBS display:', err));
+}
+
+function generateReport() {
+  const project = document.getElementById('projectSelect').value;
+  const statusDiv = document.getElementById('statusDiv');
+  const button = event.target;
+
+  button.disabled = true;
+  statusDiv.textContent = "Generating report, please wait...";
+
+  fetch(`/generate_report?project=${encodeURIComponent(project)}`)
+    .then(response => {
+      if (!response.ok) throw new Error("Report generation failed");
+      return response.blob();
+    })
+    .then(blob => {
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeName = project.replace(/\s+/g, '_');
+      a.href = url;
+      a.download = `combined_report_${safeName}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      statusDiv.textContent = "✅ Report downloaded successfully!";
+    })
+    .catch(err => {
+      console.error(err);
+      statusDiv.textContent = "❌ Failed to generate report.";
+    })
+    .finally(() => {
+      button.disabled = false;
+    });
+}
+</script>
+</body>
+</html>
+
+
