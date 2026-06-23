@@ -1,0 +1,25 @@
+# systemd unit for the TFC RQ worker — mirrors schnurr-worker.service.
+# Install to /etc/systemd/system/tfc-worker.service, then:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now tfc-worker
+#
+# Must share the SAME Redis DB + queue name as tfc-web (db 1, queue "tfc")
+# so it picks up only TFC's jobs and never Schnurr's.
+
+[Unit]
+Description=TFC App RQ Worker
+After=network.target redis.service
+Requires=redis.service
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/tfc-app
+Environment="PATH=/home/ec2-user/.local/bin:/usr/local/bin:/usr/bin" "PYTHONPATH=/home/ec2-user/.local/lib/python3.9/site-packages"
+Environment=REDIS_URL=redis://localhost:6379/1
+Environment=RQ_QUEUE=tfc
+ExecStart=/usr/bin/python3 worker.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

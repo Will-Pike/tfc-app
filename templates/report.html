@@ -18,14 +18,6 @@
       padding: 20px;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
-    .report-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-      padding-bottom: 10px;
-      border-bottom: 2px solid #dee2e6;
-    }
     .obs-number {
       font-size: 2rem;
       font-weight: bold;
@@ -36,27 +28,27 @@
       color: #6c757d;
     }
     .issue-box, .cost-box {
-      padding: 15px;
+      padding: 10px;
       border-radius: 5px;
-      margin: 15px 0;
+      margin: 10px 0;
       border: 1px solid #dee2e6;
+      font-weight: bold;
     }
     .issue-box {
       background-color: #f8f9fa;
+      font-weight: bold;
     }
     .cost-box {
       background-color: #e9ecef;
       font-weight: bold;
     }
-    .photo-container {
-      margin: 20px 0;
-      text-align: center;
+    .issue-box h5, .cost-box h5 {
+      font-size: 0.95rem;
+      margin: 0 0 6px 0;
     }
-    .photo-container img {
-      max-width: 100%;
-      height: auto;
-      border-radius: 5px;
-      box-shadow: 0 0 5px rgba(0,0,0,0.2);
+    .issue-box p, .cost-box p {
+      font-size: 0.9rem;
+      margin: 0;
     }
     @media print {
       body {
@@ -68,15 +60,100 @@
         padding: 0;
       }
     }
+    .photos-section {
+      margin: 20px 0;
+    }
+    .photo-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin: 10px 0;
+      justify-content: center;
+    }
+    
+    /* Single photo - large and centered */
+    .photo-grid.single-photo .photo-container {
+      flex: 0 0 80%;
+      max-width: 600px;
+    }
+    .photo-grid.single-photo .photo-container img {
+      width: 100%;
+      height: auto;
+      max-height: 400px;
+      object-fit: contain;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+    }
+    
+    /* Two photos - side by side */
+    .photo-grid.two-photos .photo-container {
+      flex: 0 0 45%;
+      max-width: 350px;
+    }
+    .photo-grid.two-photos .photo-container img {
+      width: 100%;
+      height: auto;
+      max-height: 250px;
+      object-fit: contain;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    
+    /* Three or more photos - smaller grid */
+    .photo-grid.multiple-photos .photo-container {
+      flex: 0 0 30%;
+      max-width: 250px;
+    }
+    .photo-grid.multiple-photos .photo-container img {
+      width: 100%;
+      height: auto;
+      max-height: 180px;
+      object-fit: contain;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    
+    .photo-container p {
+      text-align: center;
+      font-size: 10px;
+      margin: 6px 0;
+      font-weight: bold;
+      color: #666;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="report-container">
       {% for record in records %}
-      <div class="report-header">
-        <div class="obs-number">OBS #{{ record.obs_number }}</div>
-        <div class="timestamp">{{ record.date }}</div>
+      <div class="report-header mb-4">
+        <div class="issue-box" style="margin-bottom: 10px;">
+          <strong>Project:</strong>
+          <span>{{ record.project }}</span>
+        </div>
+
+        <table style="width:100%; border-collapse:collapse; margin-bottom:12px;">
+          <tr>
+            <td style="border:1px solid #dee2e6; padding:8px; width:50%;">
+              <strong>OBS #</strong><br>
+              {{ record.obs_number }}
+            </td>
+            <td style="border:1px solid #dee2e6; padding:8px; width:50%; text-align:right;">
+              <strong>Date/Time:</strong><br>
+              {{ record.date }}
+            </td>
+          </tr>
+          <tr>
+            <td style="border:1px solid #dee2e6; padding:8px;">
+              <strong>Floor/Room:</strong><br>
+              {{ record.floor }}{% if record.floor and record.room %}, {% endif %}{{ record.room }}
+            </td>
+            <td style="border:1px solid #dee2e6; padding:8px; text-align:right;">
+              <strong>Reported by:</strong><br>
+              {{ record.user }}
+            </td>
+          </tr>
+        </table>
       </div>
 
       <div class="issue-box">
@@ -84,19 +161,50 @@
         <p>{{ record.description }}</p>
       </div>
 
+      <div class="issue-box">
+        <h5>Issue Caused By:</h5>
+        <p>{{ record.responsible }}</p>
+      </div>
+
+      {% if record.additional_fields %}
+      <table style="width:100%; border-collapse:collapse; margin:10px 0;">
+        <tr>
+          <td style="border:1px solid #dee2e6; background-color:#f8f9fa; padding:10px; width:65%; vertical-align:top;">
+            {% for field_name, field_value in record.additional_fields.items() %}
+            <div style="margin-bottom:{{ '0' if loop.last else '10px' }};">
+              <h5 style="margin:0 0 4px 0; font-weight:bold; font-size:0.95rem;">{{ field_name }}:</h5>
+              <p style="margin:0; font-size:0.9rem;">{{ field_value }}</p>
+            </div>
+            {% endfor %}
+          </td>
+          <td style="border:1px solid #dee2e6; background-color:#e9ecef; padding:10px; width:35%; vertical-align:top;">
+            <h5 style="margin:0 0 6px 0; font-weight:bold; font-size:0.95rem;">Estimated Cost:</h5>
+            <p style="margin:0; font-weight:bold; font-size:0.9rem;">${{ record.cost }}</p>
+          </td>
+        </tr>
+      </table>
+      {% else %}
       <div class="cost-box">
         <h5>Estimated Cost:</h5>
         <p>${{ record.cost }}</p>
       </div>
+      {% endif %}
 
-      {% if record.photo_path %}
-      <div class="photo-container">
-        <img src="{{ record.photo_path }}" alt="Inspection Photo" />
+      {% if record.photo_paths and record.photo_paths|length > 0 %}
+      <div class="photos-section">
+        <div class="photo-grid {% if record.photo_paths|length == 1 %}single-photo{% elif record.photo_paths|length == 2 %}two-photos{% else %}multiple-photos{% endif %}">
+          {% for photo_path in record.photo_paths %}
+          <div class="photo-container">
+            <img src="{{ photo_path }}" alt="Photo {{ loop.index }}" />
+            <p>Photo {{ loop.index }}</p>
+          </div>
+          {% endfor %}
+        </div>
       </div>
       {% endif %}
 
       {% if not loop.last %}
-      <hr class="my-4" />
+      <div style="page-break-after: always;"></div>
       {% endif %}
       {% endfor %}
     </div>

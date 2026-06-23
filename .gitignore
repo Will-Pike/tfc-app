@@ -1,21 +1,23 @@
-# Runtime state & secrets — never commit these
-app_config.json
-service-account.json
-
-# Generated artifacts
-debug_*.html
-combined_report_*.pdf
-*.pdf
-
-# Python
+venv/
 __pycache__/
 *.pyc
-.venv/
-venv/
-env/
-
-# OS / editor
-.DS_Store
-
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+*.pdf
+*.csv
+report_*.csv
+service-account.json
+app_config.json
+.env
+schnurr-app.pem
+debug_*.html
+client_secret.json
+oauth_setup.py
+token.pickle
 # Local Claude Code settings
 .claude/
+.DS_Store
+.venv/

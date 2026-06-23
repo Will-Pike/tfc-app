@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Edit OBS Report</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body {
+      padding: 20px;
+      background-color: #f8f9fa;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .obs-item {
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .obs-item:hover {
+      background-color: #e9ecef;
+    }
+    .selected-obs {
+      background-color: #e7f3ff !important;
+      border-color: #0d6efd !important;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Edit OBS Report</h1>
+    <div>
+      <!-- <button class="btn btn-sm btn-outline-warning me-2" onclick="clearBackdrops()" title="Clear stuck modal backdrops">
+        Clear Backdrop
+      </button> -->
+      <a href="/" class="btn btn-secondary">Back to Main</a>
+    </div>
+  </div>
+
+  <!-- Step 1: Select Project -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5 class="card-title">Step 1: Select Project</h5>
+      <select id="projectSelect" class="form-select" onchange="loadObsList()">
+        <option value="">Choose a project...</option>
+        {% for project_name in projects %}
+        <option value="{{ project_name }}">{{ project_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <!-- Step 2: Select OBS -->
+  <div class="card mb-4" id="obsListCard" style="display:none;">
+    <div class="card-body">
+      <h5 class="card-title">Step 2: Select OBS to Edit</h5>
+      <div id="obsListContainer">
+        <!-- OBS list will be populated here -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editModalLabel">Edit OBS Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="editForm">
+          <input type="hidden" id="editObsId" />
+          <input type="hidden" id="editProject" />
+          
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="editUser" class="form-label">User:</label>
+              <select class="form-select" id="editUser">
+                <option value="">Select user...</option>
+                <option value="Chad">Chad</option>
+                <option value="Greg">Greg</option>
+                <option value="Jason">Jason</option>
+                <option value="John">John</option>
+                <option value="Mario">Mario</option>
+              </select>
+            </div>
+            <div class="col-md-3 mb-3">
+              <label for="editFloor" class="form-label">Floor:</label>
+              <input type="text" class="form-control" id="editFloor" />
+            </div>
+            <div class="col-md-3 mb-3">
+              <label for="editRoom" class="form-label">Room:</label>
+              <input type="text" class="form-control" id="editRoom" />
+            </div>
+          </div>
+          
+          <div class="mb-3">
+            <label for="editIssue" class="form-label">Issue:</label>
+            <select class="form-select" id="editIssue" onchange="updateEstimatedCost()">
+              <option value="">Loading issue types...</option>
+            </select>
+          </div>
+          
+          <div class="mb-3">
+            <label for="editCost" class="form-label">Estimated Cost:</label>
+            <input type="text" class="form-control" id="editCost" readonly style="background-color: #f8f9fa;" />
+          </div>
+          
+          <div class="mb-3">
+            <label for="editResponsible" class="form-label">Who is responsible?</label>
+            <select class="form-select" id="editResponsible" onchange="toggleOtherField()">
+              <option value="">Select responsible party...</option>
+              <option value="Electrician/Phone/Cable/other wiring">Electrician/Phone/Cable/other wiring</option>
+              <option value="Plumber">Plumber</option>
+              <option value="Ceiling">Ceiling</option>
+              <option value="Flooring">Flooring</option>
+              <option value="Door/Window/Trim/Baseboard">Door/Window/Trim/Baseboard</option>
+              <option value="HVAC">HVAC</option>
+              <option value="Other...">Other...</option>
+            </select>
+          </div>
+          
+          <div class="mb-3" id="otherResponsibleDiv" style="display:none;">
+            <label for="editOtherResponsible" class="form-label">Specify other:</label>
+            <input type="text" class="form-control" id="editOtherResponsible" />
+          </div>
+          
+          <div class="mb-3">
+            <label for="photoUpload" class="form-label">Upload Additional Photos:</label>
+            <input type="file" class="form-control" id="photoUpload" multiple accept="image/*" />
+            <div class="form-text">Select one or more photos to upload to Google Drive</div>
+            <div id="uploadStatus" class="mt-2"></div>
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label">Current Photos:</label>
+            <div id="currentPhotos" class="mt-2">
+              <!-- Current photos will be displayed here -->
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <div id="saveStatus" class="me-auto"></div>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveChanges()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+let costMapping = {};
+
+// Load issue types and costs when page loads
+document.addEventListener('DOMContentLoaded', function() {
+  loadIssueTypes();
+});
+
+function loadIssueTypes() {
+  fetch('/get_issue_types')
+    .then(response => response.json())
+    .then(data => {
+      if (data.issue_types) {
+        costMapping = data.issue_types;
+        
+        // Populate the dropdown
+        const select = document.getElementById('editIssue');
+        select.innerHTML = '<option value="">Select issue type...</option>';
+        
+        for (const issueType in costMapping) {
+          const option = document.createElement('option');
+          option.value = issueType;
+          option.textContent = issueType;
+          select.appendChild(option);
+        }
+      }
+    })
+    .catch(error => {
+      console.error('Error loading issue types:', error);
+      document.getElementById('editIssue').innerHTML = '<option value="">Error loading issue types</option>';
+    });
+}
+
+// Emergency function to clear stuck backdrops
+function clearBackdrops() {
+  const backdrops = document.querySelectorAll('.modal-backdrop');
+  backdrops.forEach(backdrop => backdrop.remove());
+  document.body.classList.remove('modal-open');
+  document.body.style.removeProperty('padding-right');
+  document.body.style.removeProperty('overflow');
+  console.log('Cleared all modal backdrops');
+}
+
+function loadObsList() {
+  const project = document.getElementById('projectSelect').value;
+  if (!project) {
+    document.getElementById('obsListCard').style.display = 'none';
+    return;
+  }
+  
+  fetch(`/get_obs_list?project=${encodeURIComponent(project)}`)
+    .then(response => response.json())
+    .then(data => {
+      const container = document.getElementById('obsListContainer');
+      container.innerHTML = '';
+      
+      if (data.obs_list && data.obs_list.length > 0) {
+        data.obs_list.forEach(obs => {
+          const obsItem = document.createElement('div');
+          obsItem.className = 'obs-item p-3 border rounded mb-2';
+          obsItem.onclick = () => selectObs(obsItem, project, obs.obs_id);
+          obsItem.innerHTML = `
+            <strong>OBS #${obs.obs_id}</strong> - ${obs.date}<br>
+            <small class="text-muted">Floor: ${obs.floor}, Room: ${obs.room}</small><br>
+            <small>${obs.issue}</small>
+          `;
+          container.appendChild(obsItem);
+        });
+        document.getElementById('obsListCard').style.display = 'block';
+      } else {
+        container.innerHTML = '<p class="text-muted">No OBS reports found for this project.</p>';
+        document.getElementById('obsListCard').style.display = 'block';
+      }
+    })
+    .catch(error => {
+      console.error('Error loading OBS list:', error);
+    });
+}
+
+function selectObs(element, project, obsId) {
+  // Remove previous selection
+  document.querySelectorAll('.obs-item').forEach(item => {
+    item.classList.remove('selected-obs');
+  });
+  
+  // Add selection to current item
+  element.classList.add('selected-obs');
+  
+  // Load the details and show modal
+  loadObsDetails(project, obsId);
+}
+
+function loadObsDetails(project, obsId) {
+  fetch(`/get_obs_details?project=${encodeURIComponent(project)}&obs_id=${encodeURIComponent(obsId)}`)
+    .then(response => response.json())
+    .then(data => {
+      if (data.error) {
+        alert('Error loading OBS details: ' + data.error);
+        return;
+      }
+      
+      // Populate the form
+      document.getElementById('editProject').value = project;
+      document.getElementById('editObsId').value = obsId;
+      document.getElementById('editUser').value = data.user || '';
+      document.getElementById('editFloor').value = data.floor || '';
+      document.getElementById('editRoom').value = data.room || '';
+      document.getElementById('editIssue').value = data.issue || '';
+      
+      // Update cost based on issue
+      updateEstimatedCost();
+      
+      // Handle responsible party
+      const responsible = data.responsible || '';
+      if (['Electrician/Phone/Cable/other wiring', 'Plumber', 'Ceiling', 'Flooring', 'Door/Window/Trim/Baseboard', 'HVAC'].includes(responsible)) {
+        document.getElementById('editResponsible').value = responsible;
+        document.getElementById('otherResponsibleDiv').style.display = 'none';
+      } else if (responsible) {
+        document.getElementById('editResponsible').value = 'Other...';
+        document.getElementById('editOtherResponsible').value = responsible;
+        document.getElementById('otherResponsibleDiv').style.display = 'block';
+      } else {
+        document.getElementById('editResponsible').value = '';
+        document.getElementById('otherResponsibleDiv').style.display = 'none';
+      }
+      
+      // Display current photos
+      displayCurrentPhotos(data.photo_url);
+      
+      // Clear any existing modal instances and backdrops
+      const existingBackdrops = document.querySelectorAll('.modal-backdrop');
+      existingBackdrops.forEach(backdrop => backdrop.remove());
+      
+      // Show the modal properly
+      const modalElement = document.getElementById('editModal');
+      const modal = new bootstrap.Modal(modalElement, {
+        backdrop: 'static',
+        keyboard: true
+      });
+      modal.show();
+      
+      document.getElementById('saveStatus').innerHTML = '';
+    })
+    .catch(error => {
+      console.error('Error loading OBS details:', error);
+    });
+}
+
+function displayCurrentPhotos(photoUrls) {
+  const container = document.getElementById('currentPhotos');
+  
+  console.log('Photo URLs received:', photoUrls);
+  
+  if (!photoUrls || photoUrls.trim() === '') {
+    container.innerHTML = '<p class="text-muted">No photos uploaded yet.</p>';
+    return;
+  }
+  
+  // Parse photo URLs
+  const urls = photoUrls.split(/[,\s\n\r]+/).map(url => url.trim()).filter(url => url && url.startsWith('http'));
+  
+  console.log('Parsed URLs:', urls);
+  
+  if (urls.length === 0) {
+    container.innerHTML = '<p class="text-muted">No valid photo URLs found.</p>';
+    return;
+  }
+  
+  let html = '<div class="row">';
+  urls.forEach((url, index) => {
+    html += `
+      <div class="col-md-4 mb-3" id="photo-${index}">
+        <div class="card">
+          <div class="card-body text-center p-3" style="min-height: 120px;">
+            <i class="fas fa-image fa-3x text-primary mb-3"></i>
+            <h6 class="card-title">Photo ${index + 1}</h6>
+            <a href="${url}" target="_blank" class="btn btn-primary btn-sm w-100 mb-2">
+              View Photo
+            </a>
+            <button class="btn btn-danger btn-sm w-100" onclick="deletePhoto(${index}, '${url}')">
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+  html += '</div>';
+  
+  container.innerHTML = html;
+  
+  // Store current URLs globally for deletion
+  window.currentPhotoUrls = urls;
+}
+
+function deletePhoto(photoIndex, photoUrl) {
+  if (!confirm('Are you sure you want to delete this photo?')) {
+    return;
+  }
+  
+  const project = document.getElementById('editProject').value;
+  const obsId = document.getElementById('editObsId').value;
+  
+  fetch('/delete_photo', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      project: project,
+      obs_id: obsId,
+      photo_url: photoUrl
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      // Remove the photo from the display
+      document.getElementById(`photo-${photoIndex}`).remove();
+      
+      // Show success message
+      document.getElementById('uploadStatus').innerHTML = 
+        '<div class="alert alert-success py-1">Photo deleted successfully</div>';
+      
+      // Clear message after a few seconds
+      setTimeout(() => {
+        document.getElementById('uploadStatus').innerHTML = '';
+      }, 3000);
+    } else {
+      alert('Error deleting photo: ' + (data.error || 'Unknown error'));
+    }
+  })
+  .catch(error => {
+    console.error('Error deleting photo:', error);
+    alert('Error deleting photo');
+  });
+}
+
+function updateEstimatedCost() {
+  const issue = document.getElementById('editIssue').value;
+  const cost = costMapping[issue] || '';
+  document.getElementById('editCost').value = cost ? `$${cost}` : '';
+}
+
+function toggleOtherField() {
+  const responsible = document.getElementById('editResponsible').value;
+  const otherDiv = document.getElementById('otherResponsibleDiv');
+  
+  if (responsible === 'Other...') {
+    otherDiv.style.display = 'block';
+  } else {
+    otherDiv.style.display = 'none';
+    document.getElementById('editOtherResponsible').value = '';
+  }
+}
+
+function saveChanges() {
+  const responsible = document.getElementById('editResponsible').value;
+  const finalResponsible = responsible === 'Other...' ? 
+    document.getElementById('editOtherResponsible').value : responsible;
+  
+  const formData = {
+    project: document.getElementById('editProject').value,
+    obs_id: document.getElementById('editObsId').value,
+    user: document.getElementById('editUser').value,
+    floor: document.getElementById('editFloor').value,
+    room: document.getElementById('editRoom').value,
+    issue: document.getElementById('editIssue').value,
+    responsible: finalResponsible
+  };
+  
+  document.getElementById('saveStatus').innerHTML = '<div class="alert alert-info py-1">Saving...</div>';
+  
+  fetch('/update_obs', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(formData)
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      document.getElementById('saveStatus').innerHTML = '<div class="alert alert-success py-1">Changes saved successfully!</div>';
+      
+      // Close modal properly after a delay
+      setTimeout(() => {
+        const modalElement = document.getElementById('editModal');
+        const modal = bootstrap.Modal.getInstance(modalElement);
+        
+        if (modal) {
+          modal.hide();
+        }
+        
+        // Clean up any remaining backdrops after modal is hidden
+        setTimeout(() => {
+          clearBackdrops();
+        }, 300);
+        
+        // Refresh the OBS list
+        loadObsList();
+      }, 1500);
+    } else {
+      document.getElementById('saveStatus').innerHTML = '<div class="alert alert-danger py-1">Error: ' + (data.error || 'Failed to save changes') + '</div>';
+    }
+  })
+  .catch(error => {
+    console.error('Error saving changes:', error);
+    document.getElementById('saveStatus').innerHTML = '<div class="alert alert-danger py-1">Error saving changes</div>';
+  });
+}
+
+// Handle photo upload
+document.getElementById('photoUpload').addEventListener('change', function(e) {
+  const files = e.target.files;
+  if (files.length === 0) return;
+  
+  const project = document.getElementById('editProject').value;
+  const obsId = document.getElementById('editObsId').value;
+  
+  if (!project || !obsId) {
+    alert('Error: Project or OBS ID missing');
+    return;
+  }
+  
+  // Create FormData to send files
+  const formData = new FormData();
+  formData.append('project', project);
+  formData.append('obs_id', obsId);
+  
+  for (let i = 0; i < files.length; i++) {
+    formData.append('photos', files[i]);
+  }
+  
+  document.getElementById('uploadStatus').innerHTML = '<div class="alert alert-info py-1">Uploading photos...</div>';
+  
+  fetch('/upload_photos', {
+    method: 'POST',
+    body: formData
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      document.getElementById('uploadStatus').innerHTML = 
+        `<div class="alert alert-success py-1">${data.message}</div>`;
+      
+      // Clear the file input
+      document.getElementById('photoUpload').value = '';
+      
+      // Refresh the photo display by reloading OBS details without closing modal
+      setTimeout(() => {
+        fetch(`/get_obs_details?project=${encodeURIComponent(project)}&obs_id=${encodeURIComponent(obsId)}`)
+          .then(response => response.json())
+          .then(data => {
+            if (!data.error) {
+              displayCurrentPhotos(data.photo_url);
+            }
+          });
+      }, 1000);
+    } else {
+      document.getElementById('uploadStatus').innerHTML = 
+        `<div class="alert alert-danger py-1">Error: ${data.error}</div>`;
+    }
+  })
+  .catch(error => {
+    console.error('Error uploading photos:', error);
+    document.getElementById('uploadStatus').innerHTML = 
+      '<div class="alert alert-danger py-1">Error uploading photos</div>';
+  });
+});
+
+// Add event listener to clean up when modal is hidden
+document.getElementById('editModal').addEventListener('hidden.bs.modal', function () {
+  clearBackdrops();
+});
+</script>
+</body>
+</html>

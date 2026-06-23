@@ -1,0 +1,26 @@
+# systemd unit for the TFC web server — mirrors schnurr-web.service.
+# Install to /etc/systemd/system/tfc-web.service, then:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now tfc-web
+#
+# Runs on port 5001 (Schnurr uses 5000). REDIS_URL points at a dedicated
+# Redis DB (db 1) so TFC's RQ jobs never mix with Schnurr's (db 0).
+
+[Unit]
+Description=TFC App Flask Web Server
+After=network.target redis.service
+Requires=redis.service
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/tfc-app
+Environment="PATH=/home/ec2-user/.local/bin:/usr/local/bin:/usr/bin" "PYTHONPATH=/home/ec2-user/.local/lib/python3.9/site-packages"
+Environment=PORT=5001
+Environment=REDIS_URL=redis://localhost:6379/1
+Environment=RQ_QUEUE=tfc
+ExecStart=/usr/bin/python3 app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
