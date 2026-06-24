@@ -18,7 +18,8 @@ Environment="PATH=/home/ec2-user/.local/bin:/usr/local/bin:/usr/bin" "PYTHONPATH
 Environment=REDIS_URL=redis://localhost:6379/1
 Environment=RQ_QUEUE=tfc
 # Must match tfc-web exactly so reports read/write the same TFC sheet.
-Environment=SPREADSHEET_ID=REPLACE_WITH_TFC_RESPONSE_SHEET_ID
+Environment=SPREADSHEET_ID=1x5fYPiP5ZQT62WNswsIpmafutovqmtCmKwAgxBH84Tg
+Environment=DRIVE_FOLDER_ID=14CHMee_p0N1vfcPz-uaPJURcta0qY3Yb5WLmtmqntpYQRX-N4ow7quFeKHqY2OcSQcMEJ8OR
 # Environment=BUILDING_COLUMN=Building
 # Environment=PRICE_COLUMN=Price Estimate
 ExecStart=/usr/bin/python3 worker.py

@@ -56,8 +56,9 @@ def compress_image(image_path):
         img.thumbnail((IMAGE_MAX_DIM, IMAGE_MAX_DIM), Image.LANCZOS)
         img.save(image_path, format="JPEG", quality=IMAGE_JPEG_QUALITY, optimize=True)
 
-# Google Drive folder ID where photos should be uploaded
-DRIVE_FOLDER_ID = "1J0vCCtKs2nBvL0cZFuye_FtGKjk7ZkEFZwgqtaHtRx_ygPItIuz5eiegm_FyWvQl866QR-bC"
+# Google Drive folder ID where Edit-view photo uploads are stored.
+# Override via env for the TFC folder.
+DRIVE_FOLDER_ID = os.getenv("DRIVE_FOLDER_ID", "1J0vCCtKs2nBvL0cZFuye_FtGKjk7ZkEFZwgqtaHtRx_ygPItIuz5eiegm_FyWvQl866QR-bC")
 
 # OAuth settings
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
@@ -721,7 +722,7 @@ def upload_photo_to_drive(file_data, filename, project, obs_id):
         # File metadata - use your original folder ID
         file_metadata = {
             'name': unique_filename,
-            'parents': ['1J0vCCtKs2nBvL0cZFuye_FtGKjk7ZkEFZwgqtaHtRx_ygPItIuz5eiegm_FyWvQl866QR-bC']
+            'parents': [DRIVE_FOLDER_ID]
         }
         
         # Create media upload
