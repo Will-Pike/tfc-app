@@ -65,6 +65,40 @@ SCOPES = ['https://www.googleapis.com/auth/drive.file']
 CLIENT_SECRETS_FILE = "client_secret.json"  # You'll need to create this
 TOKEN_FILE = "token.pickle"
 
+_sa_drive_service = None
+def get_sa_drive_service():
+    """Drive client authenticated as the service account. Used to download
+    form-uploaded photos, which are NOT public — an unauthenticated fetch gets
+    an HTML interstitial, not the image. Requires the photos' folder to be
+    shared with the service account."""
+    global _sa_drive_service
+    if _sa_drive_service is None:
+        creds = Credentials.from_service_account_file(
+            SERVICE_FILE, scopes=['https://www.googleapis.com/auth/drive.readonly'])
+        _sa_drive_service = build('drive', 'v3', credentials=creds)
+    return _sa_drive_service
+
+def download_drive_image(file_id, dest_path):
+    """Download a Drive file by ID to dest_path. Tries the authenticated service
+    account first, then falls back to the public download URL."""
+    try:
+        data = get_sa_drive_service().files().get_media(fileId=file_id).execute()
+        with open(dest_path, 'wb') as f:
+            f.write(data)
+        return True
+    except Exception as e:
+        print(f"⚠️ Service-account download failed for {file_id}: {e}; trying public URL")
+    try:
+        resp = requests.get(f"https://drive.google.com/uc?export=download&id={file_id}",
+                            stream=True, timeout=10)
+        resp.raise_for_status()
+        with open(dest_path, 'wb') as f:
+            shutil.copyfileobj(resp.raw, f)
+        return True
+    except Exception as e:
+        print(f"⚠️ Public download also failed for {file_id}: {e}")
+        return False
+
 def generate_report_for_project(project, start_date=None, end_date=None):
     # Write debug to a file that we can check
     debug_file = "/tmp/schnurr_debug.log"
@@ -200,25 +234,22 @@ def generate_report_for_project(project, start_date=None, end_date=None):
                 for photo_idx, photo_url in enumerate(urls):
                     if "drive.google.com" in photo_url and "id=" in photo_url:
                         file_id = photo_url.split("id=")[-1].split('&')[0]  # Handle additional parameters
-                        direct_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-                        try:
-                            response = requests.get(direct_url, stream=True, timeout=10)
-                            response.raise_for_status()
-                            temp_img_path = os.path.join(temp_dir, f"photo_{idx+1}_{photo_idx+1}.jpg")
-                            with open(temp_img_path, 'wb') as f:
-                                shutil.copyfileobj(response.raw, f)
+                        temp_img_path = os.path.join(temp_dir, f"photo_{idx+1}_{photo_idx+1}.jpg")
 
-                            try:
-                                compress_image(temp_img_path)
-                            except Exception as e:
-                                print(f"⚠️ Image compression failed for OBS {record['obs_number']}, photo {photo_idx+1}: {e}")
-                            
-                            # Add the file path to the list
-                            record["photo_paths"].append(f"file:///{temp_img_path.replace(os.sep, '/')}")
-                            print(f"✅ Downloaded photo {photo_idx+1} for OBS {record['obs_number']}")
-                            
+                        if not download_drive_image(file_id, temp_img_path):
+                            continue
+
+                        # Re-encode as JPEG. This both compresses and validates the
+                        # bytes are a real image — if it fails, skip the photo
+                        # rather than embed an unreadable file (blank box in PDF).
+                        try:
+                            compress_image(temp_img_path)
                         except Exception as e:
-                            print(f"⚠️ Image download failed for OBS {record['obs_number']}, photo {photo_idx+1}: {e}")
+                            print(f"⚠️ OBS {record['obs_number']} photo {photo_idx+1} is not a valid image, skipping: {e}")
+                            continue
+
+                        record["photo_paths"].append(f"file:///{temp_img_path.replace(os.sep, '/')}")
+                        print(f"✅ Downloaded photo {photo_idx+1} for OBS {record['obs_number']}")
             
             html_content = template.render(records=[record])
             
