@@ -353,6 +353,20 @@ def get_obs_list():
         print(f"Error getting OBS list: {e}")
         return jsonify({"error": "Failed to get OBS list"}), 500
 
+@app.route('/get_unpriced_count')
+def get_unpriced_count():
+    project = request.args.get('project') or get_project()
+    if not project or project not in get_projects():
+        return jsonify({"error": "Invalid or missing project"}), 400
+    try:
+        from generate_pdf import get_obs_list_for_project
+        obs_list = get_obs_list_for_project(project)
+        count = sum(1 for o in obs_list if o.get("needs_price"))
+        return jsonify({"count": count})
+    except Exception as e:
+        print(f"Error getting unpriced count: {e}")
+        return jsonify({"error": "Failed to get unpriced count"}), 500
+
 @app.route('/get_obs_details')
 def get_obs_details():
     project = request.args.get('project')

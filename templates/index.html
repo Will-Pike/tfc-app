@@ -58,7 +58,12 @@
         <a href="#" id="downloadCsvBtn" class="btn btn-info" style="display:block; width:100%; margin-top:15px;" download>Download Spreadsheet Report</a>
       </div>
 
-      <a href="/edit_obs" class="btn btn-warning">Edit / Price OBS Reports</a>
+      <a href="/edit_obs" class="btn btn-warning position-relative" id="editBtn">
+        Edit / Price OBS Reports
+        <span id="unpricedBadge"
+              class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+              style="display:none;" title="reports needing a price"></span>
+      </a>
 
       <div id="progressContainer" style="display:none; margin-top:15px;">
         <div style="background:#eee; width:100%; height:24px; border-radius:12px;">
@@ -106,6 +111,23 @@
 <script>
 const PROJECT = {{ project|tojson }};
 const BUILDINGS = {{ buildings|tojson }};
+
+document.addEventListener('DOMContentLoaded', refreshUnpricedBadge);
+
+function refreshUnpricedBadge() {
+  fetch('/get_unpriced_count?project=' + encodeURIComponent(PROJECT))
+    .then(r => r.json())
+    .then(data => {
+      const badge = document.getElementById('unpricedBadge');
+      if (data && data.count > 0) {
+        badge.textContent = data.count;
+        badge.style.display = '';
+      } else {
+        badge.style.display = 'none';
+      }
+    })
+    .catch(() => {});
+}
 
 function onBuildingChange() {
   const building = document.getElementById('buildingSelect').value;
