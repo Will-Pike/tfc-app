@@ -102,12 +102,21 @@ def get_last_row_data_route():
 
 def _next_obs_payload(project, building=None, floor=None):
     """Compute the next sequence number, the composed OBS ID, and a prefilled
-    form URL for the given building/floor selection."""
-    from generate_pdf import get_highest_obs_for_project
-    seq = get_highest_obs_for_project(project) + 1
+    form URL. Also returns the most-recent record's building/floor so the home
+    page can default the dropdowns, and prefills the most-recent submitter."""
+    from generate_pdf import get_project_context
+    ctx = get_project_context(project)
+    seq = ctx["next_seq"]
     obs_id = compose_obs_id(seq, building, floor)
-    form_url = get_prefilled_form_url(obs_id, building=building, floor=floor)
-    return {"seq": seq, "obs_id": obs_id, "form_url": form_url}
+    form_url = get_prefilled_form_url(
+        obs_id, building=building, floor=floor, user=(ctx.get("user") or None))
+    return {
+        "seq": seq,
+        "obs_id": obs_id,
+        "form_url": form_url,
+        "default_building": ctx.get("building", ""),
+        "default_floor": ctx.get("floor", ""),
+    }
 
 @app.route('/get_current_obs')
 def get_current_obs_route():

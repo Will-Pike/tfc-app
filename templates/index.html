@@ -112,7 +112,32 @@
 const PROJECT = {{ project|tojson }};
 const BUILDINGS = {{ buildings|tojson }};
 
-document.addEventListener('DOMContentLoaded', refreshUnpricedBadge);
+document.addEventListener('DOMContentLoaded', function () {
+  refreshUnpricedBadge();
+  initDefaults();
+});
+
+function initDefaults() {
+  // Pull the most recent record's building/floor and preselect them.
+  fetch('/get_current_obs?project=' + encodeURIComponent(PROJECT))
+    .then(r => r.json())
+    .then(data => {
+      const db = data.default_building;
+      const df = data.default_floor;
+      if (db && BUILDINGS[db]) {
+        document.getElementById('buildingSelect').value = db;
+        onBuildingChange();  // populates the floor options for this building
+        if (df) {
+          const fs = document.getElementById('floorSelect');
+          if ([...fs.options].some(o => o.value === String(df))) {
+            fs.value = String(df);
+          }
+        }
+      }
+      updateOBSDisplay();
+    })
+    .catch(() => {});
+}
 
 function refreshUnpricedBadge() {
   fetch('/get_unpriced_count?project=' + encodeURIComponent(PROJECT))

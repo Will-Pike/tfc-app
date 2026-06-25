@@ -548,6 +548,39 @@ def get_highest_obs_for_project(project):
         print(f"Error getting highest OBS for project {project}: {e}")
         return 0
 
+def get_project_context(project):
+    """Single sheet read -> next sequence number plus the most-recent row's
+    building/floor/user, used to default the home-page dropdowns and prefill the
+    submitter on the form."""
+    ctx = {"next_seq": 1, "building": "", "floor": "", "user": ""}
+    try:
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_FILE, scope)
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(SPREADSHEET_ID).sheet1
+        rows = sheet.get_all_records()
+
+        proj_rows = [r for r in rows if r.get("Project", "") == project]
+
+        highest = 0
+        for r in proj_rows:
+            obs_id = r.get("OBS ID#", "")
+            try:
+                obs_number = int(str(obs_id).split('-')[-1]) if obs_id != "" else 0
+                highest = max(highest, obs_number)
+            except (ValueError, TypeError):
+                continue
+        ctx["next_seq"] = highest + 1
+
+        if proj_rows:
+            last = proj_rows[-1]  # most recent submission (sheet append order)
+            ctx["building"] = last.get(BUILDING_COLUMN, "")
+            ctx["floor"] = str(last.get("Floor:", "") or "")
+            ctx["user"] = last.get("User:", "")
+    except Exception as e:
+        print(f"Error getting project context for {project}: {e}")
+    return ctx
+
 def get_obs_list_for_project(project):
     """Get list of all OBS entries for a specific project"""
     try:

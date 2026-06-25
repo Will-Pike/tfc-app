@@ -14,8 +14,8 @@
 
   "_comment_buildings": "Each building's single-letter code (used in the OBS ID) and floor count (drives the contextual Floor dropdown).",
   "buildings": {
-    "Lavaca": { "code": "L", "floors": 7 },
-    "North Congress": { "code": "C", "floors": 4 }
+    "Lavaca": { "code": "LV", "floors": 7 },
+    "North Congress": { "code": "NC", "floors": 5 }
   },
 
   "_comment_columns": "Exact column header names in the linked response Sheet. 'Building' and 'price' are the new columns; the rest of the schema reuses the existing headers.",
