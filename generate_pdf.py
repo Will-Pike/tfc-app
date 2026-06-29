@@ -4,7 +4,7 @@ import shutil
 import tempfile
 import requests
 import gspread
-from PIL import Image, ImageFile
+from PIL import Image, ImageFile, ImageOps
 from PyPDF2 import PdfMerger
 from jinja2 import Environment, FileSystemLoader
 import logging
@@ -51,6 +51,9 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 def compress_image(image_path):
     with Image.open(image_path) as img:
+        # Apply the camera's EXIF orientation to the pixels (and drop the tag),
+        # so portrait photos aren't shown rotated in the PDF.
+        img = ImageOps.exif_transpose(img)
         if img.mode not in ("RGB", "L"):
             img = img.convert("RGB")
         img.thumbnail((IMAGE_MAX_DIM, IMAGE_MAX_DIM), Image.LANCZOS)
