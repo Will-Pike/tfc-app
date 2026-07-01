@@ -100,13 +100,53 @@ def get_last_row_data_route():
         print(f"Error in get_last_row_data_route: {e}")
         return jsonify({"error": "Failed to load data"}), 500
 
-def _next_obs_payload(project, building=None, floor=None):
-    """Compute the next sequence number, the composed OBS ID, and a prefilled
-    form URL. Also returns the most-recent record's building/floor so the home
-    page can default the dropdowns, and prefills the most-recent submitter."""
+# --- OBS sequence reservation ---------------------------------------------
+# The sheet is the durable source of truth, but there's a gap between showing an
+# ID and the form being submitted. We hold short-lived reservations in Redis so
+# two simultaneous users never get the same number. Reservations live ABOVE the
+# highest number in the sheet and expire (TTL) so abandoned starts are reclaimed.
+RESERVATION_TTL = int(os.environ.get('OBS_RESERVATION_TTL', '3600'))  # seconds
+
+# Atomically find the lowest free sequence number above the sheet's highest
+# (skipping active reservations); optionally reserve it with a TTL.
+_NEXT_SEQ_LUA = """
+local prefix = ARGV[1]
+local sheet = tonumber(ARGV[2])
+local ttl = tonumber(ARGV[3])
+local reserve = ARGV[4]
+local n = sheet + 1
+while redis.call('EXISTS', prefix .. n) == 1 do
+  n = n + 1
+end
+if reserve == '1' then
+  redis.call('SET', prefix .. n, '1', 'EX', ttl)
+end
+return n
+"""
+_next_seq_script = None
+
+def _compute_seq(project, sheet_highest, reserve):
+    """Lowest free sequence number above sheet_highest. reserve=True marks it
+    taken (TTL). Falls back to sheet_highest+1 if Redis is unavailable."""
+    global _next_seq_script
+    try:
+        if _next_seq_script is None:
+            _next_seq_script = redis_conn.register_script(_NEXT_SEQ_LUA)
+        n = _next_seq_script(
+            keys=[],
+            args=[f"obs:resv:{project}:", sheet_highest, RESERVATION_TTL, '1' if reserve else '0'])
+        return int(n)
+    except Exception as e:
+        print(f"Reservation seq error: {e}; falling back to sheet+1")
+        return sheet_highest + 1
+
+def _obs_payload(project, building=None, floor=None, reserve=False):
+    """Composed OBS ID + prefilled form URL + dropdown defaults. reserve=True
+    claims the sequence number (use on the Start click); False just previews."""
     from generate_pdf import get_project_context
     ctx = get_project_context(project)
-    seq = ctx["next_seq"]
+    sheet_highest = max(0, ctx.get("next_seq", 1) - 1)
+    seq = _compute_seq(project, sheet_highest, reserve)
     obs_id = compose_obs_id(seq, building, floor)
     form_url = get_prefilled_form_url(
         obs_id, building=building, floor=floor, user=(ctx.get("user") or None))
@@ -120,29 +160,58 @@ def _next_obs_payload(project, building=None, floor=None):
 
 @app.route('/get_current_obs')
 def get_current_obs_route():
+    """Preview the next OBS ID (no reservation) — used for display."""
     project = request.args.get('project') or get_project()
     if not project or project not in get_projects():
         return jsonify({"error": "Invalid or missing project"}), 400
     building = request.args.get('building')
     floor = request.args.get('floor')
     try:
-        return jsonify(_next_obs_payload(project, building, floor))
+        return jsonify(_obs_payload(project, building, floor, reserve=False))
     except Exception as e:
         print(f"Error in get_current_obs_route: {e}")
         return jsonify({"error": "Failed to load OBS data"}), 500
 
 @app.route('/get_next_obs')
 def get_next_obs_route():
+    """Reserve the next OBS ID — used when the user clicks Start Observation."""
     project = request.args.get('project') or get_project()
     if not project or project not in get_projects():
         return jsonify({"error": "Invalid or missing project"}), 400
     building = request.args.get('building')
     floor = request.args.get('floor')
     try:
-        return jsonify(_next_obs_payload(project, building, floor))
+        return jsonify(_obs_payload(project, building, floor, reserve=True))
     except Exception as e:
         print(f"Error in get_next_obs_route: {e}")
         return jsonify({"error": "Failed to load OBS data"}), 500
+
+@app.route('/advance_obs', methods=['POST'])
+def advance_obs():
+    """Manually skip the current OBS number: reserve (burn) it, return the next."""
+    data = request.get_json(silent=True) or {}
+    project = data.get('project') or get_project()
+    if not project or project not in get_projects():
+        return jsonify({"error": "Invalid or missing project"}), 400
+    building = data.get('building')
+    floor = data.get('floor')
+    try:
+        from generate_pdf import get_project_context
+        ctx = get_project_context(project)
+        sheet_highest = max(0, ctx.get("next_seq", 1) - 1)
+        _compute_seq(project, sheet_highest, reserve=True)   # burn the current number
+        seq = _compute_seq(project, sheet_highest, reserve=False)  # preview the next
+        obs_id = compose_obs_id(seq, building, floor)
+        form_url = get_prefilled_form_url(
+            obs_id, building=building, floor=floor, user=(ctx.get("user") or None))
+        return jsonify({
+            "seq": seq, "obs_id": obs_id, "form_url": form_url,
+            "default_building": ctx.get("building", ""),
+            "default_floor": ctx.get("floor", ""),
+        })
+    except Exception as e:
+        print(f"Error in advance_obs: {e}")
+        return jsonify({"error": "Failed to advance OBS"}), 500
 
 @app.route('/reset_obs', methods=['POST'])
 def reset_obs():
@@ -164,7 +233,7 @@ def open_observation_form():
     building = request.args.get('building')
     floor = request.args.get('floor')
     try:
-        url = _next_obs_payload(project, building, floor)["form_url"]
+        url = _obs_payload(project, building, floor, reserve=True)["form_url"]
         if not url:
             return "Form URL not found", 404
         return redirect(url)

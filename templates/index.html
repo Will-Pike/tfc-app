@@ -42,7 +42,11 @@
       </div>
 
       <div class="obs-text">Next OBS ID:</div>
-      <div class="obs-number muted" id="obsNumber">Select building &amp; floor</div>
+      <div class="d-flex align-items-center justify-content-center gap-2" style="margin:8px 0;">
+        <div class="obs-number muted" id="obsNumber" style="margin:0;">Select building &amp; floor</div>
+        <button class="btn btn-outline-secondary btn-sm" id="advanceBtn" onclick="advanceObs()"
+                title="Skip this ID (advance by 1)" style="width:auto; margin:0;" disabled>+1</button>
+      </div>
 
       <a href="#" class="btn btn-success" id="formButton" target="_blank"
          onclick="startObservationReport(event)" style="pointer-events:none; opacity:0.5;">
@@ -178,21 +182,28 @@ function onBuildingChange() {
   updateOBSDisplay();
 }
 
+function setControlsEnabled(enabled) {
+  const btn = document.getElementById('formButton');
+  const adv = document.getElementById('advanceBtn');
+  btn.style.pointerEvents = enabled ? 'auto' : 'none';
+  btn.style.opacity = enabled ? '1' : '0.5';
+  adv.disabled = !enabled;
+}
+
 function updateOBSDisplay() {
   const building = document.getElementById('buildingSelect').value;
   const floor = document.getElementById('floorSelect').value;
   const obsEl = document.getElementById('obsNumber');
-  const btn = document.getElementById('formButton');
 
   if (!building || !floor) {
     obsEl.textContent = 'Select building & floor';
     obsEl.classList.add('muted');
-    btn.style.pointerEvents = 'none';
-    btn.style.opacity = '0.5';
-    btn.removeAttribute('href');
+    setControlsEnabled(false);
+    document.getElementById('formButton').removeAttribute('href');
     return;
   }
 
+  // Preview only (does NOT reserve the number).
   const params = new URLSearchParams({ project: PROJECT, building: building, floor: floor });
   fetch('/get_current_obs?' + params.toString())
     .then(r => r.json())
@@ -200,11 +211,7 @@ function updateOBSDisplay() {
       if (data.error) { obsEl.textContent = 'Error'; return; }
       obsEl.textContent = data.obs_id;
       obsEl.classList.remove('muted');
-      if (data.form_url) {
-        btn.href = data.form_url;
-        btn.style.pointerEvents = 'auto';
-        btn.style.opacity = '1';
-      }
+      setControlsEnabled(true);
     });
 }
 
@@ -214,7 +221,8 @@ function startObservationReport(event) {
   const floor = document.getElementById('floorSelect').value;
   if (!building || !floor) return;
 
-  // Re-fetch the latest sequence at click time so the ID is fresh.
+  // Reserve the number at click time (so simultaneous users can't collide),
+  // open the prefilled form, then refresh the display to the next number.
   const params = new URLSearchParams({ project: PROJECT, building: building, floor: floor });
   fetch('/get_next_obs?' + params.toString())
     .then(r => r.json())
@@ -224,8 +232,34 @@ function startObservationReport(event) {
       } else {
         alert('Form URL is not configured yet. Set form_url and field IDs in app_config.json.');
       }
+      updateOBSDisplay();  // reserved -> show the next available ID
     });
 }
+
+function advanceObs() {
+  const building = document.getElementById('buildingSelect').value;
+  const floor = document.getElementById('floorSelect').value;
+  if (!building || !floor) return;
+  fetch('/advance_obs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project: PROJECT, building: building, floor: floor })
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.error) {
+        document.getElementById('obsNumber').textContent = data.obs_id;
+      }
+    });
+}
+
+// Keep the previewed ID fresh when returning to the tab (reflects others' reservations/submissions).
+window.addEventListener('focus', function () {
+  refreshUnpricedBadge();
+  if (document.getElementById('buildingSelect').value && document.getElementById('floorSelect').value) {
+    updateOBSDisplay();
+  }
+});
 
 /* ---- Report generation (date range -> PDF + CSV) ---- */
 let progressInterval;
