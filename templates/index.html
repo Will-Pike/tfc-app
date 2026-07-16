@@ -43,6 +43,8 @@
 
       <div class="obs-text">Next OBS ID:</div>
       <div class="d-flex align-items-center justify-content-center gap-2" style="margin:8px 0;">
+        <button class="btn btn-outline-secondary btn-sm" id="undoBtn" onclick="undoSkip()"
+                title="Undo the last skip" style="width:auto; margin:0;" disabled>-1</button>
         <div class="obs-number muted" id="obsNumber" style="margin:0;">Select building &amp; floor</div>
         <button class="btn btn-outline-secondary btn-sm" id="advanceBtn" onclick="advanceObs()"
                 title="Skip this ID (advance by 1)" style="width:auto; margin:0;" disabled>+1</button>
@@ -188,12 +190,22 @@ function onBuildingChange() {
   updateOBSDisplay();
 }
 
+// Sequence numbers this session has skipped via +1, newest last. Used to offer
+// an undo (-1) that only ever releases THIS session's own skips.
+let skipStack = [];
+
 function setControlsEnabled(enabled) {
   const btn = document.getElementById('formButton');
   const adv = document.getElementById('advanceBtn');
   btn.style.pointerEvents = enabled ? 'auto' : 'none';
   btn.style.opacity = enabled ? '1' : '0.5';
   adv.disabled = !enabled;
+  updateUndoButton(enabled);
+}
+
+// -1 is available only when a building/floor is selected AND we have a skip to undo.
+function updateUndoButton(controlsEnabled) {
+  document.getElementById('undoBtn').disabled = !(controlsEnabled && skipStack.length > 0);
 }
 
 function updateOBSDisplay() {
@@ -238,6 +250,8 @@ function startObservationReport(event) {
       } else {
         alert('Form URL is not configured yet. Set form_url and field IDs in app_config.json.');
       }
+      // Starting an observation commits any prior skips as intentional gaps.
+      skipStack = [];
       updateOBSDisplay();  // reserved -> show the next available ID
     });
 }
@@ -255,6 +269,28 @@ function advanceObs() {
     .then(data => {
       if (!data.error) {
         document.getElementById('obsNumber').textContent = data.obs_id;
+        if (typeof data.burned_seq === 'number') skipStack.push(data.burned_seq);
+        updateUndoButton(true);
+      }
+    });
+}
+
+function undoSkip() {
+  const building = document.getElementById('buildingSelect').value;
+  const floor = document.getElementById('floorSelect').value;
+  if (!building || !floor || skipStack.length === 0) return;
+  const seq = skipStack[skipStack.length - 1];
+  fetch('/undo_skip', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project: PROJECT, building: building, floor: floor, seq: seq })
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.error) {
+        skipStack.pop();
+        document.getElementById('obsNumber').textContent = data.obs_id;
+        updateUndoButton(true);
       }
     });
 }

@@ -105,7 +105,7 @@ def get_last_row_data_route():
 # ID and the form being submitted. We hold short-lived reservations in Redis so
 # two simultaneous users never get the same number. Reservations live ABOVE the
 # highest number in the sheet and expire (TTL) so abandoned starts are reclaimed.
-RESERVATION_TTL = int(os.environ.get('OBS_RESERVATION_TTL', '3600'))  # seconds
+RESERVATION_TTL = int(os.environ.get('OBS_RESERVATION_TTL', '600'))  # seconds (10 min)
 
 # Atomically find the lowest free sequence number above the sheet's highest
 # (skipping active reservations); optionally reserve it with a TTL.
@@ -199,19 +199,48 @@ def advance_obs():
         from generate_pdf import get_project_context
         ctx = get_project_context(project)
         sheet_highest = max(0, ctx.get("next_seq", 1) - 1)
-        _compute_seq(project, sheet_highest, reserve=True)   # burn the current number
+        burned_seq = _compute_seq(project, sheet_highest, reserve=True)   # burn the current number
         seq = _compute_seq(project, sheet_highest, reserve=False)  # preview the next
         obs_id = compose_obs_id(seq, building, floor)
         form_url = get_prefilled_form_url(
             obs_id, building=building, floor=floor, user=(ctx.get("user") or None))
         return jsonify({
             "seq": seq, "obs_id": obs_id, "form_url": form_url,
+            "burned_seq": burned_seq,  # the number just skipped, so the client can offer an undo
             "default_building": ctx.get("building", ""),
             "default_floor": ctx.get("floor", ""),
         })
     except Exception as e:
         print(f"Error in advance_obs: {e}")
         return jsonify({"error": "Failed to advance OBS"}), 500
+
+@app.route('/undo_skip', methods=['POST'])
+def undo_skip():
+    """Undo a skip made by THIS session: release the reservation on `seq` so that
+    number becomes the next available one again. The client only ever sends back
+    sequence numbers it itself skipped, and we only release reservations that live
+    ABOVE the sheet's highest row — so this can never free a number belonging to a
+    live row (duplicate risk) or another user's in-progress observation."""
+    data = request.get_json(silent=True) or {}
+    project = data.get('project') or get_project()
+    if not project or project not in get_projects():
+        return jsonify({"error": "Invalid or missing project"}), 400
+    seq = data.get('seq')
+    if not isinstance(seq, int) or seq < 1:
+        return jsonify({"error": "Invalid seq"}), 400
+    building = data.get('building')
+    floor = data.get('floor')
+    try:
+        from generate_pdf import get_project_context
+        ctx = get_project_context(project)
+        sheet_highest = max(0, ctx.get("next_seq", 1) - 1)
+        # Only release a reservation that sits above the sheet's highest row.
+        if seq > sheet_highest:
+            redis_conn.delete(f"obs:resv:{project}:{seq}")
+        return jsonify(_obs_payload(project, building, floor, reserve=False))
+    except Exception as e:
+        print(f"Error in undo_skip: {e}")
+        return jsonify({"error": "Failed to undo skip"}), 500
 
 @app.route('/reset_obs', methods=['POST'])
 def reset_obs():
