@@ -89,6 +89,12 @@
       </div>
       <div class="modal-body">
         <div class="mb-3">
+          <label for="reportBuilding" class="form-label">Building:</label>
+          <select id="reportBuilding" class="form-control">
+            <option value="">Both Buildings</option>
+          </select>
+        </div>
+        <div class="mb-3">
           <label for="startDate" class="form-label">Start Date:</label>
           <input type="date" id="startDate" class="form-control" required>
         </div>
@@ -282,8 +288,20 @@ function updateProgressBar() {
 function finishProgressBar() { clearInterval(progressInterval); progress = 100; updateProgressBar(); }
 
 let dateRangeModal;
+function populateReportBuildings() {
+  const sel = document.getElementById('reportBuilding');
+  // Keep the leading "Both Buildings" option; rebuild the rest from config.
+  sel.length = 1;
+  Object.keys(BUILDINGS).forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  });
+}
 function showDateRangePicker() {
   if (!dateRangeModal) dateRangeModal = new bootstrap.Modal(document.getElementById('dateRangeModal'));
+  populateReportBuildings();
   const today = new Date();
   const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7);
   document.getElementById('endDate').value = today.toISOString().split('T')[0];
@@ -300,6 +318,7 @@ function setDateRange(days) {
 function confirmDateRange() {
   const startDate = document.getElementById('startDate').value;
   const endDate = document.getElementById('endDate').value;
+  const building = document.getElementById('reportBuilding').value;
   if (!startDate || !endDate) { alert('Please select both start and end dates'); return; }
   if (new Date(startDate) > new Date(endDate)) { alert('Start date must be before end date'); return; }
   dateRangeModal.hide();
@@ -309,7 +328,7 @@ function confirmDateRange() {
   startFakeProgressBar(10);
   fetch('/generate_reports', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ project: PROJECT, start_date: startDate, end_date: endDate })
+    body: JSON.stringify({ project: PROJECT, start_date: startDate, end_date: endDate, building: building })
   })
   .then(res => res.json())
   .then(data => {

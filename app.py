@@ -318,17 +318,21 @@ def generate_reports():
     project = data.get('project')
     start_date = data.get('start_date')
     end_date = data.get('end_date')
-    
+    # Empty/missing building means "Both Buildings" (no filter).
+    building = data.get('building') or None
+
     if not project or project not in get_projects():
         return jsonify({"error": "Invalid or missing project"}), 400
     if not start_date or not end_date:
         return jsonify({"error": "Start and end dates are required"}), 400
-    
+    if building and building not in get_buildings():
+        return jsonify({"error": "Invalid building"}), 400
+
     try:
         job_id = str(uuid.uuid4())
         job = task_queue.enqueue_call(
             func='generate_pdf.generate_both_reports',
-            args=(project, start_date, end_date),
+            args=(project, start_date, end_date, building),
             job_id=job_id,
             timeout=REPORT_JOB_TIMEOUT
         )
