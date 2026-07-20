@@ -102,6 +102,34 @@ def download_drive_image(file_id, dest_path):
         print(f"⚠️ Public download also failed for {file_id}: {e}")
         return False
 
+def extract_drive_file_id(url):
+    """Pull the Drive file ID out of the stored photo URL. Handles both the
+    `...?id=FILE_ID` form (what our uploads and the Google Form save) and the
+    `.../d/FILE_ID/...` form. Returns None if no ID is found."""
+    import re
+    if not url:
+        return None
+    m = re.search(r'[?&]id=([a-zA-Z0-9_-]+)', url)
+    if m:
+        return m.group(1)
+    m = re.search(r'/d/([a-zA-Z0-9_-]+)', url)
+    if m:
+        return m.group(1)
+    return None
+
+def get_drive_image_bytes(file_id):
+    """Fetch a Drive image via the service account, returning (bytes, mime_type)
+    or (None, None) on failure. Lets the app proxy non-public photos to the
+    browser (see get_sa_drive_service — these files aren't publicly readable)."""
+    try:
+        svc = get_sa_drive_service()
+        mime = svc.files().get(fileId=file_id, fields='mimeType').execute().get('mimeType')
+        data = svc.files().get_media(fileId=file_id).execute()
+        return data, (mime or 'image/jpeg')
+    except Exception as e:
+        print(f"Drive image fetch failed for {file_id}: {e}")
+        return None, None
+
 def _building_slug(building):
     """Filename-safe suffix for a building filter, or '' for all buildings."""
     if not building:
@@ -694,6 +722,36 @@ def get_obs_details(project, obs_id):
     except Exception as e:
         print(f"Error getting OBS details: {e}")
         return None
+
+def find_obs_row_indices(project, obs_id):
+    """Return the 1-based sheet row indices whose Project + OBS ID# match.
+    Usually 0 or 1 entries; returns a list so pre-existing duplicates are handled."""
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+    creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_FILE, scope)
+    client = gspread.authorize(creds)
+    sheet = client.open_by_key(SPREADSHEET_ID).sheet1
+    rows = sheet.get_all_records()
+    indices = []
+    for idx, row in enumerate(rows):
+        if row.get("Project", "") == project and str(row.get("OBS ID#", "")) == str(obs_id):
+            indices.append(idx + 2)  # +2: 1-indexed rows, skip header
+    return indices
+
+def delete_obs_rows(project, obs_id):
+    """Delete every row matching Project + OBS ID# (deleting bottom-up so earlier
+    row indices stay valid). Returns the number of rows removed. The uploaded
+    photos on Drive are intentionally left in place (non-destructive, mirrors the
+    delete-photo route)."""
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+    creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_FILE, scope)
+    client = gspread.authorize(creds)
+    sheet = client.open_by_key(SPREADSHEET_ID).sheet1
+    rows = sheet.get_all_records()
+    indices = [idx + 2 for idx, row in enumerate(rows)
+               if row.get("Project", "") == project and str(row.get("OBS ID#", "")) == str(obs_id)]
+    for row_index in sorted(indices, reverse=True):
+        sheet.delete_rows(row_index)
+    return len(indices)
 
 def update_obs_in_spreadsheet(project, obs_id, updated_data):
     """Update an OBS entry in the spreadsheet"""

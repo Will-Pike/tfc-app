@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request, redirect, send_file
+from flask import Flask, render_template, jsonify, request, redirect, send_file, Response
 import json
 import os
 import urllib.parse
@@ -80,7 +80,8 @@ def index():
     return render_template(
         'index.html',
         project=get_project(),
-        buildings=get_buildings()
+        buildings=get_buildings(),
+        id_prefix=(app_config.get("id_prefix") or get_project() or "")
     )
 
 @app.route('/get_projects')
@@ -105,7 +106,7 @@ def get_last_row_data_route():
 # ID and the form being submitted. We hold short-lived reservations in Redis so
 # two simultaneous users never get the same number. Reservations live ABOVE the
 # highest number in the sheet and expire (TTL) so abandoned starts are reclaimed.
-RESERVATION_TTL = int(os.environ.get('OBS_RESERVATION_TTL', '600'))  # seconds (10 min)
+RESERVATION_TTL = int(os.environ.get('OBS_RESERVATION_TTL', '300'))  # seconds (5 min)
 
 # Atomically find the lowest free sequence number above the sheet's highest
 # (skipping active reservations); optionally reserve it with a TTL.
@@ -139,6 +140,17 @@ def _compute_seq(project, sheet_highest, reserve):
     except Exception as e:
         print(f"Reservation seq error: {e}; falling back to sheet+1")
         return sheet_highest + 1
+
+def _reserve_exact(project, seq):
+    """Reserve one specific sequence number (atomic SET NX). Returns True if we
+    claimed it, False if it was already reserved by someone else. Fails open
+    (True) when Redis is unavailable, matching _compute_seq's fallback."""
+    try:
+        got = redis_conn.set(f"obs:resv:{project}:{seq}", '1', nx=True, ex=RESERVATION_TTL)
+        return bool(got)
+    except Exception as e:
+        print(f"Reserve exact error: {e}; proceeding without reservation")
+        return True
 
 def _obs_payload(project, building=None, floor=None, reserve=False):
     """Composed OBS ID + prefilled form URL + dropdown defaults. reserve=True
@@ -241,6 +253,62 @@ def undo_skip():
     except Exception as e:
         print(f"Error in undo_skip: {e}")
         return jsonify({"error": "Failed to undo skip"}), 500
+
+@app.route('/start_observation', methods=['POST'])
+def start_observation():
+    """Begin an observation on the sequence number the user has dialed in the UI
+    (which, via -1, may be an ID that already exists in the sheet).
+
+    - Existing ID + not confirmed  -> ask the client to confirm the replacement.
+    - Existing ID + confirmed      -> delete the old row(s) now so the pending
+                                      form submission won't create a duplicate,
+                                      then return the prefilled form URL.
+    - New / gap ID                 -> reserve it (guards simultaneous NEW use)
+                                      and return the form URL. If it was just
+                                      taken and this was the auto-suggested ID,
+                                      bump to the next free number instead."""
+    data = request.get_json(silent=True) or {}
+    project = data.get('project') or get_project()
+    if not project or project not in get_projects():
+        return jsonify({"error": "Invalid or missing project"}), 400
+    seq = data.get('seq')
+    if not isinstance(seq, int) or seq < 1:
+        return jsonify({"error": "Invalid seq"}), 400
+    building = data.get('building')
+    floor = data.get('floor')
+    confirm = bool(data.get('confirm'))
+    auto = bool(data.get('auto'))  # True when seq is the auto-suggested next ID
+    try:
+        from generate_pdf import get_project_context, find_obs_row_indices, delete_obs_rows
+        ctx = get_project_context(project)
+        user = ctx.get("user") or None
+        obs_id = compose_obs_id(seq, building, floor)
+
+        if find_obs_row_indices(project, obs_id):
+            if not confirm:
+                return jsonify({"status": "exists", "obs_id": obs_id})
+            # Replace: remove the existing row(s) now. The form submission will
+            # re-create a single row with this ID a few minutes from now.
+            delete_obs_rows(project, obs_id)
+            form_url = get_prefilled_form_url(obs_id, building=building, floor=floor, user=user)
+            return jsonify({"status": "ok", "obs_id": obs_id, "form_url": form_url})
+
+        # New / gap number: reserve so two people can't take it simultaneously.
+        if _reserve_exact(project, seq):
+            form_url = get_prefilled_form_url(obs_id, building=building, floor=floor, user=user)
+            return jsonify({"status": "ok", "obs_id": obs_id, "form_url": form_url})
+
+        # Already reserved by someone else right now.
+        if auto:
+            sheet_highest = max(0, ctx.get("next_seq", 1) - 1)
+            new_seq = _compute_seq(project, sheet_highest, reserve=True)
+            new_obs_id = compose_obs_id(new_seq, building, floor)
+            form_url = get_prefilled_form_url(new_obs_id, building=building, floor=floor, user=user)
+            return jsonify({"status": "ok", "obs_id": new_obs_id, "form_url": form_url})
+        return jsonify({"status": "taken", "obs_id": obs_id})
+    except Exception as e:
+        print(f"Error in start_observation: {e}")
+        return jsonify({"error": "Failed to start observation"}), 500
 
 @app.route('/reset_obs', methods=['POST'])
 def reset_obs():
@@ -445,6 +513,25 @@ def download_csv_report(job_id):
     except Exception as e:
         print(f"Error downloading CSV: {e}")
         return "CSV report not found or not ready.", 404
+
+@app.route('/photo_proxy')
+def photo_proxy():
+    """Stream a Drive photo through the app so it can be shown inline on the Edit
+    page. The photos aren't publicly readable, so the browser can't load them
+    directly — we fetch the bytes as the service account and relay them."""
+    src = request.args.get('src')
+    file_id = request.args.get('id')
+    from generate_pdf import extract_drive_file_id, get_drive_image_bytes
+    if not file_id and src:
+        file_id = extract_drive_file_id(src)
+    if not file_id:
+        return "Missing photo id", 400
+    data, mime = get_drive_image_bytes(file_id)
+    if data is None:
+        return "Photo not available", 404
+    resp = Response(data, mimetype=mime or 'image/jpeg')
+    resp.headers['Cache-Control'] = 'private, max-age=3600'
+    return resp
 
 @app.route('/edit_obs')
 def edit_obs():

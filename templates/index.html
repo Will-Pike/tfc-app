@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TFC Inspection OBS Generator</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/app.css') }}" rel="stylesheet">
   <style>
-    body { padding: 20px; background-color: #f8f9fa; }
-    .container { max-width: 700px; margin: 0 auto; }
-    .obs-text { font-size: 1.25rem; font-weight: bold; color: #000; text-align: center; margin-top: 20px; }
-    .obs-number { font-size: 2.75rem; font-weight: bold; color: #0d6efd; text-align: center; margin: 8px 0 20px; }
-    .obs-number.muted { color: #adb5bd; font-size: 1.5rem; }
+    body { padding: 20px; }
     .btn-primary, .btn-success, .btn-danger, .btn-info, .btn-warning, .btn-secondary { width: 100%; margin-top: 10px; }
     .status { margin-top: 15px; text-align: center; }
     .pdf-button { margin-top: 1vh; width: 100%; }
@@ -21,7 +21,7 @@
   <h1 class="text-center mb-1">TFC Inspection</h1>
   <p class="text-center text-muted mb-4">Project: {{ project }}</p>
 
-  <div class="card mb-4">
+  <div class="card mb-4 card-accent">
     <div class="card-body">
       <div class="row">
         <div class="col-md-6 mb-3">
@@ -35,19 +35,21 @@
         </div>
         <div class="col-md-6 mb-3">
           <label for="floorSelect" class="form-label">Floor:</label>
-          <select id="floorSelect" class="form-select" onchange="updateOBSDisplay()" disabled>
+          <select id="floorSelect" class="form-select" onchange="onFloorChange()" disabled>
             <option value="">Select building first</option>
           </select>
         </div>
       </div>
 
-      <div class="obs-text">Next OBS ID:</div>
-      <div class="d-flex align-items-center justify-content-center gap-2" style="margin:8px 0;">
-        <button class="btn btn-outline-secondary btn-sm" id="undoBtn" onclick="undoSkip()"
-                title="Undo the last skip" style="width:auto; margin:0;" disabled>-1</button>
-        <div class="obs-number muted" id="obsNumber" style="margin:0;">Select building &amp; floor</div>
-        <button class="btn btn-outline-secondary btn-sm" id="advanceBtn" onclick="advanceObs()"
-                title="Skip this ID (advance by 1)" style="width:auto; margin:0;" disabled>+1</button>
+      <div class="obs-hero">
+        <div class="obs-text">Next OBS ID</div>
+        <div class="d-flex align-items-center justify-content-center gap-3">
+          <button class="btn btn-outline-secondary" id="undoBtn" onclick="decrementObs()"
+                  title="Go back one ID" disabled>−1</button>
+          <div class="obs-number muted" id="obsNumber">Select building &amp; floor</div>
+          <button class="btn btn-outline-secondary" id="advanceBtn" onclick="advanceObs()"
+                  title="Advance one ID" disabled>+1</button>
+        </div>
       </div>
 
       <a href="#" class="btn btn-success" id="formButton" target="_blank"
@@ -123,6 +125,7 @@
 <script>
 const PROJECT = {{ project|tojson }};
 const BUILDINGS = {{ buildings|tojson }};
+const PREFIX = {{ id_prefix|tojson }};
 
 document.addEventListener('DOMContentLoaded', function () {
   refreshUnpricedBadge();
@@ -167,6 +170,7 @@ function refreshUnpricedBadge() {
 }
 
 function onBuildingChange() {
+  manualAdjusted = false;  // switching context clears any dialed-in ID
   const building = document.getElementById('buildingSelect').value;
   const floorSelect = document.getElementById('floorSelect');
   floorSelect.innerHTML = '';
@@ -190,22 +194,46 @@ function onBuildingChange() {
   updateOBSDisplay();
 }
 
-// Sequence numbers this session has skipped via +1, newest last. Used to offer
-// an undo (-1) that only ever releases THIS session's own skips.
-let skipStack = [];
+// The displayed sequence number. baseSeq is the auto next-available ID from the
+// server; currentSeq is what's shown (the user can dial it with +1 / -1).
+// manualAdjusted = the user has stepped away from the auto value, so we stop
+// overwriting it on preview refreshes.
+let baseSeq = null;
+let currentSeq = null;
+let manualAdjusted = false;
+
+// Compose the OBS ID exactly as the server's compose_obs_id does.
+function composeObsId(seq) {
+  const b = document.getElementById('buildingSelect').value;
+  const f = document.getElementById('floorSelect').value;
+  if (b && f && BUILDINGS[b]) {
+    const code = BUILDINGS[b].code || b.charAt(0).toUpperCase();
+    return PREFIX + '-' + code + f + '-' + seq;
+  }
+  return String(seq);
+}
 
 function setControlsEnabled(enabled) {
   const btn = document.getElementById('formButton');
-  const adv = document.getElementById('advanceBtn');
   btn.style.pointerEvents = enabled ? 'auto' : 'none';
   btn.style.opacity = enabled ? '1' : '0.5';
-  adv.disabled = !enabled;
-  updateUndoButton(enabled);
+  document.getElementById('advanceBtn').disabled = !enabled;
+  // -1 stays disabled at the floor of 1 (can't go below the first ID).
+  document.getElementById('undoBtn').disabled =
+    !(enabled && currentSeq != null && currentSeq > 1);
 }
 
-// -1 is available only when a building/floor is selected AND we have a skip to undo.
-function updateUndoButton(controlsEnabled) {
-  document.getElementById('undoBtn').disabled = !(controlsEnabled && skipStack.length > 0);
+function renderObs() {
+  const obsEl = document.getElementById('obsNumber');
+  if (currentSeq == null) return;
+  obsEl.textContent = composeObsId(currentSeq);
+  obsEl.classList.remove('muted');
+  setControlsEnabled(true);
+}
+
+function onFloorChange() {
+  manualAdjusted = false;  // a new floor is a fresh context
+  updateOBSDisplay();
 }
 
 function updateOBSDisplay() {
@@ -216,6 +244,8 @@ function updateOBSDisplay() {
   if (!building || !floor) {
     obsEl.textContent = 'Select building & floor';
     obsEl.classList.add('muted');
+    currentSeq = null;
+    baseSeq = null;
     setControlsEnabled(false);
     document.getElementById('formButton').removeAttribute('href');
     return;
@@ -227,78 +257,81 @@ function updateOBSDisplay() {
     .then(r => r.json())
     .then(data => {
       if (data.error) { obsEl.textContent = 'Error'; return; }
-      obsEl.textContent = data.obs_id;
-      obsEl.classList.remove('muted');
-      setControlsEnabled(true);
+      baseSeq = data.seq;
+      if (!manualAdjusted) currentSeq = baseSeq;
+      renderObs();
     });
+}
+
+function advanceObs() {   // +1
+  if (currentSeq == null) return;
+  currentSeq += 1;
+  manualAdjusted = true;
+  renderObs();
+}
+
+function decrementObs() { // -1 — can walk back into IDs that already exist
+  if (currentSeq == null || currentSeq <= 1) return;
+  currentSeq -= 1;
+  manualAdjusted = true;
+  renderObs();
 }
 
 function startObservationReport(event) {
   event.preventDefault();
   const building = document.getElementById('buildingSelect').value;
   const floor = document.getElementById('floorSelect').value;
-  if (!building || !floor) return;
+  if (!building || !floor || currentSeq == null) return;
 
-  // Reserve the number at click time (so simultaneous users can't collide),
-  // open the prefilled form, then refresh the display to the next number.
-  const params = new URLSearchParams({ project: PROJECT, building: building, floor: floor });
-  fetch('/get_next_obs?' + params.toString())
-    .then(r => r.json())
-    .then(data => {
-      if (data.form_url) {
-        window.open(data.form_url, '_blank');
-      } else {
-        alert('Form URL is not configured yet. Set form_url and field IDs in app_config.json.');
-      }
-      // Starting an observation commits any prior skips as intentional gaps.
-      skipStack = [];
-      updateOBSDisplay();  // reserved -> show the next available ID
-    });
+  // Open the tab synchronously on the click so the browser doesn't block it
+  // after our async round-trip; we set its URL once the server responds.
+  const win = window.open('', '_blank');
+  sendStart(building, floor, currentSeq, !manualAdjusted, false, win);
 }
 
-function advanceObs() {
-  const building = document.getElementById('buildingSelect').value;
-  const floor = document.getElementById('floorSelect').value;
-  if (!building || !floor) return;
-  fetch('/advance_obs', {
+function sendStart(building, floor, seq, auto, confirmFlag, win) {
+  fetch('/start_observation', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ project: PROJECT, building: building, floor: floor })
+    body: JSON.stringify({ project: PROJECT, building: building, floor: floor,
+                           seq: seq, auto: auto, confirm: confirmFlag })
   })
     .then(r => r.json())
     .then(data => {
-      if (!data.error) {
-        document.getElementById('obsNumber').textContent = data.obs_id;
-        if (typeof data.burned_seq === 'number') skipStack.push(data.burned_seq);
-        updateUndoButton(true);
+      if (data.status === 'exists') {
+        const ok = window.confirm(
+          'This will REPLACE existing observation ' + data.obs_id + '.\n\n' +
+          'Its current data and photo links will be permanently deleted, and ' +
+          'you\'ll re-enter it on the form.\n\nContinue?');
+        if (ok) { sendStart(building, floor, seq, auto, true, win); }
+        else if (win) { win.close(); }
+        return;
       }
-    });
+      if (data.status === 'taken') {
+        if (win) win.close();
+        alert('OBS ID ' + data.obs_id + ' is currently being used by someone else. ' +
+              'Please pick a different number.');
+        return;
+      }
+      if (data.status === 'ok' && data.form_url) {
+        if (win) win.location = data.form_url; else window.open(data.form_url, '_blank');
+        manualAdjusted = false;
+        updateOBSDisplay();  // back to the next available ID
+        return;
+      }
+      if (win) win.close();
+      alert((data && data.error) || 'Could not start observation.');
+    })
+    .catch(err => { if (win) win.close(); alert('Error: ' + err.message); });
 }
 
-function undoSkip() {
-  const building = document.getElementById('buildingSelect').value;
-  const floor = document.getElementById('floorSelect').value;
-  if (!building || !floor || skipStack.length === 0) return;
-  const seq = skipStack[skipStack.length - 1];
-  fetch('/undo_skip', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ project: PROJECT, building: building, floor: floor, seq: seq })
-  })
-    .then(r => r.json())
-    .then(data => {
-      if (!data.error) {
-        skipStack.pop();
-        document.getElementById('obsNumber').textContent = data.obs_id;
-        updateUndoButton(true);
-      }
-    });
-}
-
-// Keep the previewed ID fresh when returning to the tab (reflects others' reservations/submissions).
+// Keep the previewed ID fresh when returning to the tab (reflects others'
+// submissions) — but don't clobber a number the user has manually dialed.
 window.addEventListener('focus', function () {
   refreshUnpricedBadge();
-  if (document.getElementById('buildingSelect').value && document.getElementById('floorSelect').value) {
+  if (!manualAdjusted &&
+      document.getElementById('buildingSelect').value &&
+      document.getElementById('floorSelect').value) {
     updateOBSDisplay();
   }
 });

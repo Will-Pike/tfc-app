@@ -21,3 +21,5 @@ token.pickle
 .claude/
 .DS_Store
 .venv/
+# Redis dump (runtime artifact)
+dump.rdb

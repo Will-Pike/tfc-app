@@ -1,0 +1,284 @@
+/* ==========================================================================
+   TFC app — shared design layer, loaded after Bootstrap to reskin it.
+   Neutral, near-white surfaces with a single confident accent.
+   ========================================================================== */
+
+:root {
+  --accent:        #1f9254;   /* primary brand green               */
+  --accent-hover:  #167640;
+  --accent-soft:   #e9f6ee;   /* tinted panel / soft button fill   */
+  --accent-border: #c7e7d3;
+  --accent-rgb:    31,146,84; /* var(--accent) as rgb for shadows  */
+
+  --ink:      #1a2a22;        /* headings / strong text            */
+  --body:     #384740;        /* body copy                         */
+  --muted:    #6a7770;        /* secondary text                    */
+
+  --bg:       #f1f5f2;        /* page background (soft green-gray) */
+  --surface:  #ffffff;        /* cards                             */
+  --surface-2:#eef3f0;        /* hover / subtle fills              */
+  --border:   #e2e8e4;
+
+  --radius:   14px;
+  --radius-sm:10px;
+  --shadow:   0 1px 2px rgba(16,24,40,.04), 0 6px 20px rgba(16,24,40,.05);
+}
+
+/* ---- Base ---------------------------------------------------------------- */
+body {
+  background-color: var(--bg);
+  color: var(--body);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.container { max-width: 780px; }
+
+/* ---- Header -------------------------------------------------------------- */
+h1 {
+  color: var(--ink);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+h1.text-center::after {
+  content: "";
+  display: block;
+  width: 46px;
+  height: 3px;
+  margin: 12px auto 0;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+/* ---- Cards --------------------------------------------------------------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.card-body { padding: 1.5rem; }
+
+/* Home page's main card gets a slim brand accent along the top edge */
+.card-accent {
+  border-top: 3px solid var(--accent);
+  border-top-left-radius: var(--radius);
+  border-top-right-radius: var(--radius);
+}
+
+/* ---- Form controls ------------------------------------------------------- */
+.form-label {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #39424f;
+  margin-bottom: 0.35rem;
+}
+.form-select,
+.form-control {
+  border-radius: var(--radius-sm);
+  border-color: #dde1e8;
+  color: var(--ink);
+  padding: 0.55rem 0.8rem;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.form-select:focus,
+.form-control:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.15);
+}
+
+/* ---- Buttons: shared shape ---------------------------------------------- */
+.btn {
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  padding: 0.6rem 1.05rem;
+  transition: transform .05s ease, box-shadow .15s ease,
+              background-color .15s ease, border-color .15s ease;
+}
+.btn:active { transform: translateY(1px); }
+
+/* Brand — the primary calls to action (Start Observation, Downloads, Save) */
+.btn-primary,
+.btn-success {
+  --bs-btn-bg: var(--accent);
+  --bs-btn-border-color: var(--accent);
+  --bs-btn-hover-bg: var(--accent-hover);
+  --bs-btn-hover-border-color: var(--accent-hover);
+  --bs-btn-active-bg: var(--accent-hover);
+  --bs-btn-active-border-color: var(--accent-hover);
+  --bs-btn-disabled-bg: var(--accent);
+  --bs-btn-disabled-border-color: var(--accent);
+  --bs-btn-focus-shadow-rgb: var(--accent-rgb);
+  box-shadow: 0 1px 2px rgba(var(--accent-rgb),.25);
+}
+.btn-primary:hover,
+.btn-success:hover { box-shadow: 0 4px 12px rgba(var(--accent-rgb),.28); }
+
+/* Neutral / ghost — secondary actions (Generate Reports, Back) */
+.btn-secondary {
+  --bs-btn-color: var(--ink);
+  --bs-btn-bg: #ffffff;
+  --bs-btn-border-color: var(--border);
+  --bs-btn-hover-color: var(--ink);
+  --bs-btn-hover-bg: var(--surface-2);
+  --bs-btn-hover-border-color: #d5d9e1;
+  --bs-btn-active-color: var(--ink);
+  --bs-btn-active-bg: var(--surface-2);
+  --bs-btn-active-border-color: #d5d9e1;
+  --bs-btn-focus-shadow-rgb: 120,130,145;
+}
+
+/* Soft accent — the spreadsheet download sits beside the PDF one */
+.btn-info {
+  --bs-btn-color: var(--accent-hover);
+  --bs-btn-bg: var(--accent-soft);
+  --bs-btn-border-color: var(--accent-border);
+  --bs-btn-hover-color: var(--accent-hover);
+  --bs-btn-hover-bg: #dcefe3;
+  --bs-btn-hover-border-color: #b6ddc5;
+  --bs-btn-active-bg: #dcefe3;
+  --bs-btn-active-border-color: #b6ddc5;
+  --bs-btn-focus-shadow-rgb: var(--accent-rgb);
+}
+
+/* Amber utility — Edit / Price (draws the eye to the unpriced badge) */
+.btn-warning {
+  --bs-btn-color: #8a5300;
+  --bs-btn-bg: #fff4e0;
+  --bs-btn-border-color: #ffe1b0;
+  --bs-btn-hover-color: #7a4900;
+  --bs-btn-hover-bg: #ffedcc;
+  --bs-btn-hover-border-color: #ffd591;
+  --bs-btn-active-bg: #ffedcc;
+  --bs-btn-active-border-color: #ffd591;
+  --bs-btn-focus-shadow-rgb: 245,166,35;
+}
+
+/* Refined red — destructive only (Delete photo) */
+.btn-danger {
+  --bs-btn-bg: #e04a4f;
+  --bs-btn-border-color: #e04a4f;
+  --bs-btn-hover-bg: #c93c41;
+  --bs-btn-hover-border-color: #c93c41;
+  --bs-btn-active-bg: #c93c41;
+  --bs-btn-active-border-color: #c93c41;
+  --bs-btn-focus-shadow-rgb: 224,74,79;
+}
+
+/* ---- OBS ID hero --------------------------------------------------------- */
+.obs-hero {
+  background: linear-gradient(160deg, #eef8f1 0%, #e2f2e8 100%);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius);
+  padding: 20px 16px 22px;
+  margin: 6px 0 20px;
+  text-align: center;
+}
+.obs-text {
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin: 0 0 4px;
+}
+.obs-number {
+  font-size: 2.6rem;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+  line-height: 1.1;
+}
+.obs-number.muted {
+  color: #aab0bd;
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+/* +1 / -1 steppers as tidy round buttons.
+   flex:0 0 40px keeps them from being squeezed into ovals on narrow screens. */
+#undoBtn, #advanceBtn {
+  flex: 0 0 40px;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  padding: 0;
+  font-weight: 700;
+  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  --bs-btn-color: var(--muted);
+  --bs-btn-border-color: #d5d9e1;
+  --bs-btn-hover-color: var(--accent);
+  --bs-btn-hover-bg: #ffffff;
+  --bs-btn-hover-border-color: var(--accent);
+}
+
+/* ---- Progress ------------------------------------------------------------ */
+#progressBar { background: var(--accent) !important; }
+
+/* ---- Badges -------------------------------------------------------------- */
+.badge.bg-danger { background-color: #e04a4f !important; }
+
+/* ---- Modals -------------------------------------------------------------- */
+.modal-content {
+  border: none;
+  border-radius: var(--radius);
+  box-shadow: 0 20px 60px rgba(16,24,40,.22);
+}
+.modal-header, .modal-footer { border-color: var(--border); }
+.modal-title { color: var(--ink); font-weight: 700; }
+
+/* ---- Alerts -------------------------------------------------------------- */
+.alert-success {
+  background: #ecfbf3;
+  border-color: #c6efd8;
+  color: #1c7a4b;
+}
+
+/* ==========================================================================
+   Edit / Price page
+   ========================================================================== */
+.obs-item {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: background-color .15s ease, border-color .15s ease,
+              box-shadow .15s ease;
+}
+.obs-item:hover {
+  background-color: var(--surface-2);
+  box-shadow: 0 2px 8px rgba(16,24,40,.06);
+}
+.selected-obs {
+  background-color: var(--accent-soft) !important;
+  border-color: var(--accent) !important;
+}
+.needs-price {
+  background-color: #fff7e6 !important;
+  border-color: #ffd591 !important;
+  border-left: 4px solid #f5a623 !important;
+}
+
+/* Inline photo thumbnails on the edit modal */
+.photo-thumb {
+  display: block;
+  width: 100%;
+  height: 170px;
+  object-fit: cover;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  cursor: pointer;
+  background: var(--surface-2);
+}
+.photo-thumb-fallback {
+  border-radius: 12px 12px 0 0;
+  border-bottom: 1px solid var(--border);
+}
+.photo-thumb-fallback:hover { background: #e7ece9; }
