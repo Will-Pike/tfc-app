@@ -185,18 +185,22 @@ h1.text-center::after {
   margin: 0 0 4px;
 }
 .obs-number {
-  font-size: 2.6rem;
+  /* Fluid size so the full ID (e.g. TFC-LV1-144) always stays on one line,
+     shrinking on narrow phones instead of wrapping at the hyphens. */
+  font-size: clamp(1.4rem, 8vw, 2.6rem);
   font-weight: 800;
   color: var(--accent);
   letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
-  margin: 0;
+  white-space: nowrap;
+  margin: 2px 0 14px;
   line-height: 1.1;
 }
 .obs-number.muted {
   color: #aab0bd;
-  font-size: 1.3rem;
+  font-size: 1.25rem;
   font-weight: 700;
+  white-space: normal;  /* the placeholder prompt may wrap; a real ID never does */
 }
 
 /* +1 / -1 steppers as tidy round buttons.

@@ -664,8 +664,16 @@ def get_obs_list_for_project(project):
                     "needs_price": price == ""
                 })
 
-        # Sort by OBS ID descending (newest first)
-        obs_list.sort(key=lambda x: str(x.get("obs_id", "")), reverse=True)
+        # Sort by the trailing sequence number, descending (highest first).
+        # A plain string sort mis-orders numbers (e.g. "...-99" above "...-100"),
+        # so key on the integer after the last hyphen; non-numeric IDs sort last.
+        def _seq_key(obs):
+            tail = str(obs.get("obs_id", "")).split('-')[-1].strip()
+            try:
+                return (1, int(tail))
+            except ValueError:
+                return (0, 0)
+        obs_list.sort(key=_seq_key, reverse=True)
         return obs_list
     except Exception as e:
         print(f"Error getting OBS list: {e}")
