@@ -130,13 +130,16 @@ def get_drive_image_bytes(file_id):
         print(f"Drive image fetch failed for {file_id}: {e}")
         return None, None
 
-def _building_slug(building):
-    """Filename-safe suffix for a building filter, or '' for all buildings."""
+def _building_slug(building, floor=None):
+    """Filename-safe suffix for a building/floor filter, or '' for all buildings."""
     if not building:
         return ""
-    return "_" + building.replace(' ', '_').replace('.', '')
+    slug = "_" + building.replace(' ', '_').replace('.', '')
+    if floor:
+        slug += f"_F{floor}"
+    return slug
 
-def generate_report_for_project(project, start_date=None, end_date=None, building=None):
+def generate_report_for_project(project, start_date=None, end_date=None, building=None, floor=None):
     # Write debug to a file that we can check
     debug_file = "/tmp/schnurr_debug.log"
     
@@ -195,6 +198,10 @@ def generate_report_for_project(project, start_date=None, end_date=None, buildin
 
         # Filter by building if provided (empty/None => all buildings)
         if building and row.get(BUILDING_COLUMN, "") != building:
+            continue
+
+        # Filter by floor if provided (empty/None => all floors)
+        if floor and str(row.get("Floor:", "")) != str(floor):
             continue
 
         # Filter by date range if provided
@@ -332,7 +339,7 @@ def generate_report_for_project(project, start_date=None, end_date=None, buildin
             job.save_meta()
         
         # Use absolute path in current directory for Windows compatibility
-        output_filename = f"report_{project.replace(' ', '_').replace('.', '')}{_building_slug(building)}.pdf"
+        output_filename = f"report_{project.replace(' ', '_').replace('.', '')}{_building_slug(building, floor)}.pdf"
         output_path = os.path.abspath(output_filename)
         
         # For large reports (>100 PDFs), use batch merging to avoid memory issues
@@ -398,7 +405,7 @@ def generate_report_for_project(project, start_date=None, end_date=None, buildin
 
         return output_path
 
-def generate_csv_for_project(project, start_date=None, end_date=None, building=None):
+def generate_csv_for_project(project, start_date=None, end_date=None, building=None, floor=None):
     """Generate CSV file for a project with optional date range"""
     import csv
     from datetime import datetime
@@ -435,6 +442,13 @@ def generate_csv_for_project(project, start_date=None, end_date=None, building=N
         building_col_idx = headers.index(BUILDING_COLUMN)
     except ValueError:
         pass  # If no building column, skip building filtering
+
+    # Find floor column index for floor filtering
+    floor_col_idx = None
+    try:
+        floor_col_idx = headers.index("Floor:")
+    except ValueError:
+        pass  # If no floor column, skip floor filtering
     
     # Parse date range if provided
     start_dt = None
@@ -457,6 +471,12 @@ def generate_csv_for_project(project, start_date=None, end_date=None, building=N
             if row_building != building:
                 continue
 
+        # Filter by floor if provided (empty/None => all floors)
+        if floor and floor_col_idx is not None:
+            row_floor = row[floor_col_idx] if len(row) > floor_col_idx else ""
+            if str(row_floor) != str(floor):
+                continue
+
         # Filter by date if timestamp column exists and date range provided
         if timestamp_col_idx is not None and (start_dt or end_dt):
             if len(row) > timestamp_col_idx and row[timestamp_col_idx]:
@@ -477,11 +497,15 @@ def generate_csv_for_project(project, start_date=None, end_date=None, building=N
         filtered_rows.append(list(row))
     
     if not filtered_rows:
-        scope_desc = f"{project} / {building}" if building else project
+        scope_desc = project
+        if building:
+            scope_desc += f" / {building}"
+            if floor:
+                scope_desc += f" floor {floor}"
         raise FileNotFoundError(f"No records found for project: {scope_desc} in the specified date range")
 
     # Write CSV file
-    output_filename = f"report_{project.replace(' ', '_').replace('.', '')}{_building_slug(building)}.csv"
+    output_filename = f"report_{project.replace(' ', '_').replace('.', '')}{_building_slug(building, floor)}.csv"
     output_path = os.path.abspath(output_filename)
     
     with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
@@ -491,14 +515,15 @@ def generate_csv_for_project(project, start_date=None, end_date=None, building=N
     
     return output_path
 
-def generate_both_reports(project, start_date, end_date, building=None):
+def generate_both_reports(project, start_date, end_date, building=None, floor=None):
     """Generate both PDF and CSV reports for a project with date range.
-    building=None/'' includes all buildings; otherwise filters to that building."""
+    building=None/'' includes all buildings; otherwise filters to that building.
+    floor=None/'' includes all floors; otherwise filters to that floor within the building."""
     debug_file = "/tmp/schnurr_debug.log"
 
     with open(debug_file, "a") as df:
         df.write(f"\n=== GENERATE_BOTH_REPORTS CALLED ===\n")
-        df.write(f"Project: {project}, Start: {start_date}, End: {end_date}, Building: {building or 'ALL'}\n")
+        df.write(f"Project: {project}, Start: {start_date}, End: {end_date}, Building: {building or 'ALL'}, Floor: {floor or 'ALL'}\n")
     
     job = get_current_job() if get_current_job else None
 
@@ -513,7 +538,7 @@ def generate_both_reports(project, start_date, end_date, building=None):
             df.write(f"Job metadata initialized: status=generating_csv, total=1, processed=0\n")
 
     try:
-        csv_path = generate_csv_for_project(project, start_date, end_date, building)
+        csv_path = generate_csv_for_project(project, start_date, end_date, building, floor)
         with open(debug_file, "a") as df:
             df.write(f"CSV generated successfully: {csv_path}\n")
     except Exception as e:
@@ -530,7 +555,7 @@ def generate_both_reports(project, start_date, end_date, building=None):
             df.write(f"Job metadata set: status=generating_pdfs\n")
 
     try:
-        pdf_path = generate_report_for_project(project, start_date, end_date, building)
+        pdf_path = generate_report_for_project(project, start_date, end_date, building, floor)
         with open(debug_file, "a") as df:
             df.write(f"PDF generated successfully: {pdf_path}\n")
     except Exception as e:

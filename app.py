@@ -417,6 +417,10 @@ def generate_reports():
     end_date = data.get('end_date')
     # Empty/missing building means "Both Buildings" (no filter).
     building = data.get('building') or None
+    # Empty/missing floor means "All Floors" (no filter). Floor only applies when a building is set.
+    floor = data.get('floor') or None
+    if not building:
+        floor = None  # floor filter is meaningless without a building
 
     if not project or project not in get_projects():
         return jsonify({"error": "Invalid or missing project"}), 400
@@ -424,12 +428,19 @@ def generate_reports():
         return jsonify({"error": "Start and end dates are required"}), 400
     if building and building not in get_buildings():
         return jsonify({"error": "Invalid building"}), 400
+    if floor:
+        floors = get_buildings().get(building, {}).get("floors", 0)
+        try:
+            if int(floor) < 1 or int(floor) > floors:
+                return jsonify({"error": "Invalid floor for selected building"}), 400
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid floor value"}), 400
 
     try:
         job_id = str(uuid.uuid4())
         job = task_queue.enqueue_call(
             func='generate_pdf.generate_both_reports',
-            args=(project, start_date, end_date, building),
+            args=(project, start_date, end_date, building, floor),
             job_id=job_id,
             timeout=REPORT_JOB_TIMEOUT
         )

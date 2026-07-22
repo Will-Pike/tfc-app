@@ -94,8 +94,14 @@
       <div class="modal-body">
         <div class="mb-3">
           <label for="reportBuilding" class="form-label">Building:</label>
-          <select id="reportBuilding" class="form-control">
+          <select id="reportBuilding" class="form-control" onchange="onReportBuildingChange()">
             <option value="">Both Buildings</option>
+          </select>
+        </div>
+        <div class="mb-3" id="reportFloorGroup" style="display:none;">
+          <label for="reportFloor" class="form-label">Floor:</label>
+          <select id="reportFloor" class="form-control">
+            <option value="">All Floors</option>
           </select>
         </div>
         <div class="mb-3">
@@ -367,6 +373,28 @@ function populateReportBuildings() {
     opt.textContent = name;
     sel.appendChild(opt);
   });
+  // Reset floor picker
+  document.getElementById('reportFloorGroup').style.display = 'none';
+  const floorSel = document.getElementById('reportFloor');
+  floorSel.length = 1; // only keep "All Floors"
+}
+function onReportBuildingChange() {
+  const building = document.getElementById('reportBuilding').value;
+  const floorGroup = document.getElementById('reportFloorGroup');
+  const floorSel = document.getElementById('reportFloor');
+  floorSel.length = 1; // reset to just "All Floors"
+  if (building && BUILDINGS[building]) {
+    const floors = BUILDINGS[building].floors || 0;
+    for (let f = 1; f <= floors; f++) {
+      const opt = document.createElement('option');
+      opt.value = f;
+      opt.textContent = 'Floor ' + f;
+      floorSel.appendChild(opt);
+    }
+    floorGroup.style.display = '';
+  } else {
+    floorGroup.style.display = 'none';
+  }
 }
 function showDateRangePicker() {
   if (!dateRangeModal) dateRangeModal = new bootstrap.Modal(document.getElementById('dateRangeModal'));
@@ -388,6 +416,7 @@ function confirmDateRange() {
   const startDate = document.getElementById('startDate').value;
   const endDate = document.getElementById('endDate').value;
   const building = document.getElementById('reportBuilding').value;
+  const floor = document.getElementById('reportFloor').value;
   if (!startDate || !endDate) { alert('Please select both start and end dates'); return; }
   if (new Date(startDate) > new Date(endDate)) { alert('Start date must be before end date'); return; }
   dateRangeModal.hide();
@@ -397,7 +426,7 @@ function confirmDateRange() {
   startFakeProgressBar(10);
   fetch('/generate_reports', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ project: PROJECT, start_date: startDate, end_date: endDate, building: building })
+    body: JSON.stringify({ project: PROJECT, start_date: startDate, end_date: endDate, building: building, floor: floor })
   })
   .then(res => res.json())
   .then(data => {
