@@ -1,6 +1,7 @@
 from flask import Flask, render_template, jsonify, request, redirect, send_file, Response
 import json
 import os
+import time
 import urllib.parse
 from generate_pdf import generate_report_for_project  # Import your clean PDF generator!
 from rq import Queue
@@ -8,6 +9,8 @@ from rq.job import Job
 import redis
 import uuid
 import platform
+import progress_store
+import threading
 
 app = Flask(__name__)
 
@@ -81,8 +84,103 @@ def index():
         'index.html',
         project=get_project(),
         buildings=get_buildings(),
-        id_prefix=(app_config.get("id_prefix") or get_project() or "")
+        id_prefix=(app_config.get("id_prefix") or get_project() or ""),
+        progress_status_values=progress_store.STATUS_VALUES
     )
+
+@app.route('/get_progress_entries')
+def get_progress_entries_route():
+    project = request.args.get('project') or get_project()
+    if not project or project not in get_projects():
+        return jsonify({"error": "Invalid or missing project"}), 400
+    entries = progress_store.get_progress_entries(project)
+    entries = sorted(entries, key=lambda e: e.get('updated_at', 0), reverse=True)
+    summary = progress_store.build_status_summary(entries)
+    return jsonify({"entries": entries, "summary": summary})
+
+@app.route('/get_progress_entry')
+def get_progress_entry_route():
+    project = request.args.get('project') or get_project()
+    entry_id = request.args.get('id')
+    if not project or project not in get_projects():
+        return jsonify({"error": "Invalid or missing project"}), 400
+    if not entry_id:
+        return jsonify({"error": "Missing entry ID"}), 400
+    entry = progress_store.get_progress_entry(project, entry_id)
+    if not entry:
+        return jsonify({"error": "Progress entry not found"}), 404
+    return jsonify(entry)
+
+@app.route('/save_progress_entry', methods=['POST'])
+def save_progress_entry_route():
+    if request.content_type and request.content_type.startswith('multipart/form-data'):
+        data = request.form.to_dict()
+        files = request.files.getlist('photos')
+    else:
+        data = request.get_json(silent=True) or {}
+        files = []
+
+    project = data.get('project') or get_project()
+    if not project or project not in get_projects():
+        return jsonify({"error": "Invalid or missing project"}), 400
+
+    entry_id = data.get('id') or str(uuid.uuid4())
+    existing = progress_store.get_progress_entry(project, entry_id)
+    photo_urls = existing.get('photo_urls', []) if existing else []
+
+    uploaded_urls = []
+    if files:
+        uploaded_urls = progress_store.save_progress_entry_photos(project, entry_id, files)
+        photo_urls.extend(uploaded_urls)
+
+    entry = {
+        'id': entry_id,
+        'project': project,
+        'building': data.get('building', '').strip(),
+        'floor': data.get('floor', '').strip(),
+        'room': data.get('room', '').strip(),
+        'notes': data.get('notes', '').strip(),
+        'status': data.get('status', '').strip() or progress_store.STATUS_VALUES[0],
+        'photo_urls': photo_urls,
+        'created_at': existing.get('created_at') if existing else int(time.time()),
+        'updated_at': int(time.time())
+    }
+
+    progress_store.save_progress_entry(entry)
+    return jsonify({"success": True, "entry": entry})
+
+@app.route('/find_progress_entry')
+def find_progress_entry_route():
+    project = request.args.get('project') or get_project()
+    building = request.args.get('building', '').strip()
+    floor = request.args.get('floor', '').strip()
+    room = request.args.get('room', '').strip()
+
+    if not project or project not in get_projects():
+        return jsonify({"error": "Invalid or missing project"}), 400
+    if not building or not floor or not room:
+        return jsonify({"error": "Missing location parameters"}), 400
+
+    entry = progress_store.get_progress_entry_by_location(project, building, floor, room)
+    return jsonify({"found": bool(entry), "entry": entry})
+
+
+@app.route('/delete_progress_entry', methods=['POST'])
+def delete_progress_entry_route():
+    data = request.get_json(silent=True) or {}
+    project = data.get('project') or get_project()
+    entry_id = data.get('id')
+
+    if not project or project not in get_projects():
+        return jsonify({"error": "Invalid or missing project"}), 400
+    if not entry_id:
+        return jsonify({"error": "Missing entry ID"}), 400
+
+    success = progress_store.delete_progress_entry(project, entry_id)
+    if success:
+        return jsonify({"success": True})
+    return jsonify({"error": "Progress entry not found"}), 404
+
 
 @app.route('/get_projects')
 def get_projects_route():
@@ -669,6 +767,116 @@ def upload_photos():
     except Exception as e:
         print(f"Error uploading photos: {e}")
         return jsonify({"error": "Failed to upload photos"}), 500
+
+
+@app.route('/upload_progress_photos', methods=['POST'])
+def upload_progress_photos():
+    """Upload photos attached to a progress entry (stored locally under static/uploads/progress).
+    Expects multipart/form-data: 'project', 'entry_id' and one or more files under 'photos'.
+    Returns JSON with uploaded URLs on success."""
+    try:
+        files = request.files.getlist('photos')
+        project = request.form.get('project') or request.form.get('proj')
+        entry_id = request.form.get('entry_id') or request.form.get('id')
+
+        if not files:
+            return jsonify({"error": "No files uploaded"}), 400
+        if not project or not entry_id:
+            return jsonify({"error": "Missing project or entry_id"}), 400
+        if project not in get_projects():
+            return jsonify({"error": "Invalid project"}), 400
+
+        # First, save all files locally (fast) so we can respond immediately.
+        saved_urls = progress_store.save_progress_entry_photos(project, entry_id, files)
+
+        # Attach local URLs to the entry immediately so the UI can show them.
+        entry = progress_store.get_progress_entry(project, entry_id)
+        if entry is None:
+            entry = {
+                'id': entry_id,
+                'project': project,
+                'building': '',
+                'floor': '',
+                'room': '',
+                'notes': '',
+                'status': progress_store.STATUS_VALUES[0],
+                'photo_urls': saved_urls.copy(),
+                'created_at': int(time.time()),
+                'updated_at': int(time.time())
+            }
+        else:
+            entry.setdefault('photo_urls', [])
+            entry['photo_urls'].extend(saved_urls)
+            entry['updated_at'] = int(time.time())
+        progress_store.save_progress_entry(entry)
+
+        # Spawn a background thread to attempt Drive uploads and update the entry
+        def background_drive_upload(local_urls):
+            try:
+                import generate_pdf
+                sa = None
+                try:
+                    sa = generate_pdf.get_sa_drive_service()
+                except Exception as e:
+                    print(f"Background: Couldn't get service account drive client: {e}")
+                    sa = None
+
+                drive_folder = getattr(generate_pdf, 'DRIVE_FOLDER_ID', None)
+                updated = False
+                for lu in local_urls:
+                    # only handle local static uploads
+                    if not lu.startswith('/static/uploads/progress/'):
+                        continue
+                    # Convert URL to filesystem path
+                    rel = lu.replace('/static/', '')
+                    fs_path = os.path.join(os.getcwd(), 'static', rel)
+                    if not os.path.exists(fs_path):
+                        continue
+                    try:
+                        if sa and drive_folder:
+                            # Upload using MediaFileUpload
+                            media = generate_pdf.MediaFileUpload(fs_path, resumable=False)
+                            unique_name = os.path.basename(fs_path)
+                            file_meta = {'name': unique_name, 'parents': [drive_folder]}
+                            created = sa.files().create(body=file_meta, media_body=media, fields='id').execute()
+                            file_id = created.get('id')
+                            try:
+                                sa.permissions().create(fileId=file_id, body={'type': 'anyone', 'role': 'reader'}).execute()
+                            except Exception:
+                                pass
+                            drive_url = f"https://drive.google.com/open?id={file_id}"
+                            # Replace local URL with Drive URL in the entry
+                            e = progress_store.get_progress_entry(project, entry_id) or {}
+                            if e:
+                                e.setdefault('photo_urls', [])
+                                # remove the local url if present
+                                e['photo_urls'] = [u for u in e['photo_urls'] if u != lu]
+                                e['photo_urls'].append(drive_url)
+                                e['updated_at'] = int(time.time())
+                                progress_store.save_progress_entry(e)
+                                updated = True
+                        # Optionally: remove local file after upload
+                        # os.remove(fs_path)
+                    except Exception as ex:
+                        print(f"Background: failed to upload {fs_path} to Drive: {ex}")
+                        continue
+
+                if updated:
+                    print(f"Background: Drive upload completed for progress entry {entry_id}")
+            except Exception as e:
+                print(f"Background drive uploader error: {e}")
+
+        # Start background thread (daemon so it won't block process exit)
+        try:
+            t = threading.Thread(target=background_drive_upload, args=(saved_urls,), daemon=True)
+            t.start()
+        except Exception as e:
+            print(f"Failed to start background drive upload thread: {e}")
+
+        return jsonify({"success": True, "uploaded_urls": saved_urls})
+    except Exception as e:
+        print(f"Error uploading progress photos: {e}")
+        return jsonify({"error": "Failed to upload progress photos"}), 500
 
 @app.route('/delete_photo', methods=['POST'])
 def delete_photo():
