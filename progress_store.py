@@ -13,7 +13,8 @@ STATUS_VALUES = [
     'Issues Found',
     'Repair Authorized',
     'Do Not Repair',
-    'Completed'
+    'Completed',
+    'No Access'
 ]
 
 
