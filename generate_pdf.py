@@ -885,6 +885,19 @@ def update_obs_in_spreadsheet(project, obs_id, updated_data):
         print(f"Error updating OBS: {e}")
         return False
 
+def _next_empty_row(sheet):
+    """First row below the last row that holds any content (1-indexed).
+
+    get_all_values() trims trailing fully-empty rows, but can still return rows
+    made up entirely of empty strings, so scan for the last row with content
+    instead of trusting the list length."""
+    all_values = sheet.get_all_values()
+    last_used = 0
+    for idx, row_values in enumerate(all_values, start=1):
+        if any(str(cell).strip() for cell in row_values):
+            last_used = idx
+    return last_used + 1
+
 def append_obs_to_spreadsheet(project, obs_id, data, photo_urls=None):
     """Append one native observation using the response sheet's header order."""
     try:
@@ -910,7 +923,23 @@ def append_obs_to_spreadsheet(project, obs_id, data, photo_urls=None):
         }
         normalized_values = {key.rstrip(':').strip(): value for key, value in values.items()}
         row = [normalized_values.get(header.rstrip(':').strip(), '') for header in headers]
-        sheet.append_row(row, value_input_option='USER_ENTERED')
+        # Don't use append_row(): the Sheets append API detects the "table" itself
+        # and (in OVERWRITE mode) can land back on the last populated row. Resolve
+        # the first genuinely empty row ourselves and write directly to it.
+        target_row = _next_empty_row(sheet)
+        if target_row > sheet.row_count:
+            sheet.add_rows(target_row - sheet.row_count)
+        last_col = max(len(row), 1)
+        cell_range = "'{}'!{}:{}".format(
+            sheet.title,
+            gspread.utils.rowcol_to_a1(target_row, 1),
+            gspread.utils.rowcol_to_a1(target_row, last_col))
+        # values_update() keeps the same signature across gspread 5.x/6.x
+        # (Worksheet.update() swapped its positional args in 6.0).
+        sheet.spreadsheet.values_update(
+            cell_range,
+            params={'valueInputOption': 'USER_ENTERED'},
+            body={'values': [row]})
         return True
     except Exception as e:
         print(f"Error appending native OBS {obs_id}: {e}")
