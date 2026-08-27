@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.pickle
 *.db
 *.sqlite3
 *.log
@@ -12,14 +13,22 @@ report_*.csv
 service-account.json
 app_config.json
 .env
-schnurr-app.pem
+*.pem
+*.ppk
 debug_*.html
 client_secret.json
 oauth_setup.py
-token.pickle
 # Local Claude Code settings
 .claude/
 .DS_Store
 .venv/
+# Local Python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 # Redis dump (runtime artifact)
 dump.rdb
+# Runtime-uploaded progress photos
+static/uploads/progress/

@@ -85,7 +85,19 @@ def index():
         project=get_project(),
         buildings=get_buildings(),
         id_prefix=(app_config.get("id_prefix") or get_project() or ""),
-        progress_status_values=progress_store.STATUS_VALUES
+        progress_status_values=progress_store.STATUS_VALUES,
+        current_page='observations'
+    )
+
+@app.route('/progress')
+def progress_page():
+    return render_template(
+        'index.html',
+        project=get_project(),
+        buildings=get_buildings(),
+        id_prefix=(app_config.get("id_prefix") or get_project() or ""),
+        progress_status_values=progress_store.STATUS_VALUES,
+        current_page='progress'
     )
 
 @app.route('/get_progress_entries')
@@ -407,6 +419,86 @@ def start_observation():
     except Exception as e:
         print(f"Error in start_observation: {e}")
         return jsonify({"error": "Failed to start observation"}), 500
+
+@app.route('/start_native_observation', methods=['POST'])
+def start_native_observation():
+    """Reserve an OBS number and return the native observation form context."""
+    data = request.get_json(silent=True) or {}
+    project = data.get('project') or get_project()
+    if not project or project not in get_projects():
+        return jsonify({"error": "Invalid or missing project"}), 400
+    seq = data.get('seq')
+    building = data.get('building')
+    floor = data.get('floor')
+    replace = bool(data.get('replace'))
+    if not isinstance(seq, int) or seq < 1 or building not in get_buildings() or not floor:
+        return jsonify({"error": "Invalid observation location"}), 400
+    try:
+        from generate_pdf import get_project_context
+        obs_id = compose_obs_id(seq, building, floor)
+        ctx = get_project_context(project)
+        if obs_id in ctx.get('obs_ids', set()):
+            if not replace:
+                return jsonify({"status": "exists", "obs_id": obs_id})
+            return jsonify({"status": "ok", "obs_id": obs_id, "user": ctx.get('user', '')})
+        if not _reserve_exact(project, seq):
+            return jsonify({"status": "taken", "obs_id": obs_id})
+        return jsonify({"status": "ok", "obs_id": obs_id, "user": ctx.get('user', '')})
+    except Exception as e:
+        print(f"Error starting native observation: {e}")
+        return jsonify({"error": "Failed to start observation"}), 500
+
+@app.route('/submit_native_observation', methods=['POST'])
+def submit_native_observation():
+    """Upload compressed photos and append the completed native observation."""
+    project = request.form.get('project') or get_project()
+    obs_id = request.form.get('obs_id', '').strip()
+    building = request.form.get('building', '').strip()
+    floor = request.form.get('floor', '').strip()
+    room = request.form.get('room', '').strip()
+    issue = request.form.get('issue', '').strip()
+    user = request.form.get('user', '').strip()
+    location_within_room = request.form.get('location_within_room', '').strip()
+    responsible = request.form.get('responsible', '').strip()
+    stakeholder = request.form.get('stakeholder', '').strip()
+    price = request.form.get('price', '').strip()
+    replace = request.form.get('replace') == 'true'
+    reservation_key = None
+    if obs_id:
+        reservation_key = f"obs:resv:{project}:{obs_id.rsplit('-', 1)[-1]}"
+    if not project or project not in get_projects() or not obs_id or building not in get_buildings() or not floor or not room or not issue:
+        return jsonify({"error": "Building, floor, room, and issue are required."}), 400
+    try:
+        from generate_pdf import append_obs_to_spreadsheet, delete_obs_rows, upload_native_photo_to_drive
+        photo_urls = []
+        for file in request.files.getlist('photos'):
+            if not file or not file.filename:
+                continue
+            file_data = file.read()
+            if len(file_data) > 8 * 1024 * 1024:
+                return jsonify({"error": "Each photo must be 8 MB or smaller."}), 400
+            url = upload_native_photo_to_drive(
+                file_data, os.path.basename(file.filename), project, obs_id,
+                file.mimetype or 'image/jpeg')
+            if not url:
+                return jsonify({"error": "A photo could not be uploaded."}), 502
+            photo_urls.append(url)
+        if replace:
+            delete_obs_rows(project, obs_id)
+        if not append_obs_to_spreadsheet(project, obs_id, {
+                'building': building, 'floor': floor, 'room': room,
+            'issue': issue, 'user': user,
+            'location_within_room': location_within_room,
+            'responsible': responsible, 'stakeholder': stakeholder,
+            'price': price}, photo_urls):
+            return jsonify({"error": "Could not save the observation."}), 502
+        redis_conn.delete(f"obs:resv:{project}:{obs_id.rsplit('-', 1)[-1]}")
+        return jsonify({"success": True, "obs_id": obs_id})
+    except Exception as e:
+        print(f"Error submitting native observation: {e}")
+        if reservation_key:
+            redis_conn.delete(reservation_key)
+        return jsonify({"error": "Failed to save observation"}), 500
 
 @app.route('/reset_obs', methods=['POST'])
 def reset_obs():

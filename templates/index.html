@@ -23,106 +23,109 @@
   </style>
 </head>
 <body>
+  <!-- Hamburger / Side nav -->
+  <button class="menu-btn" id="menuBtn" aria-label="Open navigation">
+    <span class="bar bar1"></span>
+    <span class="bar bar2"></span>
+    <span class="bar bar3"></span>
+  </button>
+  <div class="sidenav-backdrop" id="sidenavBackdrop" onclick="closeSideNav()"></div>
+  <nav class="sidenav" id="sidenav">
+    <!-- <div class="sidenav-header">
+      <h5>Navigation</h5>
+      <a href="#" onclick="closeSideNav();return false;">Close</a>
+    </div> -->
+    <a href="/" class="sidenav-link" id="nav-home">Observations</a>
+    <a href="/progress" class="sidenav-link" id="nav-progress">Progress</a>
+    <a href="/edit_obs?project={{ project }}" class="sidenav-link" id="nav-edit">Edit / Price</a>
+  </nav>
 <div class="container">
   <h1 class="text-center mb-1">TFC Inspection</h1>
 
-  <ul class="nav nav-tabs justify-content-center mb-4" id="mainTabs" role="tablist">
-    <li class="nav-item" role="presentation">
-      <button class="nav-link active" id="observations-tab" data-bs-toggle="tab" data-bs-target="#tab-observations" type="button" role="tab" aria-controls="tab-observations" aria-selected="true">Observations</button>
-    </li>
-    <li class="nav-item" role="presentation">
-      <button class="nav-link" id="progress-tab" data-bs-toggle="tab" data-bs-target="#tab-progress" type="button" role="tab" aria-controls="tab-progress" aria-selected="false">Progress</button>
-    </li>
-  </ul>
-
-  <div class="tab-content" id="mainTabContent">
-    <div class="tab-pane fade show active" id="tab-observations" role="tabpanel" aria-labelledby="observations-tab">
-      <div class="card mb-4 card-accent">
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label for="buildingSelect" class="form-label">Building:</label>
-              <select id="buildingSelect" class="form-select" onchange="onBuildingChange()">
-                <option value="">Select building...</option>
-                {% for name in buildings.keys() %}
-                <option value="{{ name }}">{{ name }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-6 mb-3">
-              <label for="floorSelect" class="form-label">Floor:</label>
-              <select id="floorSelect" class="form-select" onchange="onFloorChange()" disabled>
-                <option value="">Select building first</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="obs-hero">
-        <div class="obs-text">Next OBS ID</div>
-        <div class="obs-number muted" id="obsNumber">Select building &amp; floor</div>
-        <div class="obs-stepper d-flex align-items-center justify-content-center gap-3">
-          <button class="btn btn-outline-secondary" id="undoBtn" onclick="decrementObs()"
-                  title="Go back one ID" disabled>−1</button>
-          <button class="btn btn-outline-secondary" id="advanceBtn" onclick="advanceObs()"
-                  title="Advance one ID" disabled>+1</button>
-        </div>
-      </div>
-
-      <a href="#" class="btn btn-success" id="formButton" target="_blank"
-         onclick="startObservationReport(event)" style="pointer-events:none; opacity:0.5;">
-         Start Observation Report
-      </a>
-
-      <button class="btn btn-secondary pdf-button" onclick="showDateRangePicker()">Generate Reports</button>
-      <div id="reportStatus" class="status"></div>
-
-      <div id="downloadSection" style="display:none; margin-top:20px;">
-        <div id="downloadMessage" class="alert alert-success" role="alert">Reports are ready for download!</div>
-        <a href="#" id="downloadPdfBtn" class="btn btn-primary" style="display:block; width:100%; margin-bottom:15px;" download>Download PDF Report</a>
-        <a href="#" id="downloadCsvBtn" class="btn btn-info" style="display:block; width:100%; margin-top:15px;" download>Download Spreadsheet Report</a>
-      </div>
-
-      <a href="/edit_obs" class="btn btn-warning position-relative" id="editBtn">
-        Edit / Price OBS Reports
-        <span id="unpricedBadge"
-              class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
-              style="display:none;" title="reports needing a price"></span>
-      </a>
-
-      <div id="progressContainer" style="display:none; margin-top:15px;">
-        <div style="background:#eee; width:100%; height:24px; border-radius:12px;">
-          <div id="progressBar" style="background:#0d6efd; width:0%; height:24px; border-radius:12px; transition:width 0.2s;"></div>
-        </div>
-        <div id="progressText" style="text-align:center; margin-top:4px;">0%</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-    <div class="tab-pane fade" id="tab-progress" role="tabpanel" aria-labelledby="progress-tab">
-      <div class="row g-3">
-        <div class="col-lg-4">
-          <div class="card mb-3">
-            <div class="card-body">
-              <h5 class="card-title">Project Status</h5>
-              <div id="progressSummary"></div>
-            </div>
+  {% if current_page == 'progress' %}
+    <div class="row g-3">
+      <div class="col-lg-4">
+        <div class="card mb-3">
+          <div class="card-body">
+            <h5 class="card-title">Project Status</h5>
+            <div id="progressSummary"></div>
           </div>
         </div>
-        <div class="col-lg-8">
-          <div class="card mb-3">
-            <div class="card-body">
-              <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="card-title mb-0">Progress Reports</h5>
-                <button class="btn btn-primary btn-sm" id="newProgressBtn">New Progress Report</button>
-              </div>
-              <div id="progressList"></div>
+      </div>
+      <div class="col-lg-8">
+        <div class="card mb-3">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5 class="card-title mb-0">Progress Reports</h5>
+              <button class="btn btn-primary btn-sm" id="newProgressBtn">New Progress Report</button>
             </div>
+            <div id="progressList"></div>
           </div>
         </div>
       </div>
     </div>
-  </div>
+  {% else %}
+    <div class="card mb-4 card-accent">
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label for="buildingSelect" class="form-label">Building:</label>
+            <select id="buildingSelect" class="form-select" onchange="onBuildingChange()">
+              <option value="">Select building...</option>
+              {% for name in buildings.keys() %}
+              <option value="{{ name }}">{{ name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label for="floorSelect" class="form-label">Floor:</label>
+            <select id="floorSelect" class="form-select" onchange="onFloorChange()" disabled>
+              <option value="">Select building first</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="obs-hero">
+          <div class="obs-text">Next OBS ID</div>
+          <div class="obs-number muted" id="obsNumber">Select building &amp; floor</div>
+          <div class="obs-stepper d-flex align-items-center justify-content-center gap-3">
+            <button class="btn btn-outline-secondary" id="undoBtn" onclick="decrementObs()"
+                    title="Go back one ID" disabled>−1</button>
+            <button class="btn btn-outline-secondary" id="advanceBtn" onclick="advanceObs()"
+                    title="Advance one ID" disabled>+1</button>
+          </div>
+        </div>
+
+          <button type="button" class="btn btn-success" id="formButton"
+            onclick="startObservationReport(event)" style="pointer-events:none; opacity:0.5;">
+           Start Observation Report
+          </button>
+
+        <button class="btn btn-secondary pdf-button" onclick="showDateRangePicker()">Generate Reports</button>
+        <div id="reportStatus" class="status"></div>
+
+        <div id="downloadSection" style="display:none; margin-top:20px;">
+          <div id="downloadMessage" class="alert alert-success" role="alert">Reports are ready for download!</div>
+          <a href="#" id="downloadPdfBtn" class="btn btn-primary" style="display:block; width:100%; margin-bottom:15px;" download>Download PDF Report</a>
+          <a href="#" id="downloadCsvBtn" class="btn btn-info" style="display:block; width:100%; margin-top:15px;" download>Download Spreadsheet Report</a>
+        </div>
+
+        <a href="/edit_obs" class="btn btn-warning position-relative" id="editBtn">
+          Edit / Price OBS Reports
+          <span id="unpricedBadge"
+                class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+                style="display:none;" title="reports needing a price"></span>
+        </a>
+
+        <div id="progressContainer" style="display:none; margin-top:15px;">
+          <div style="background:#eee; width:100%; height:24px; border-radius:12px;">
+            <div id="progressBar" style="background:#0d6efd; width:0%; height:24px; border-radius:12px; transition:width 0.2s;"></div>
+          </div>
+          <div id="progressText" style="text-align:center; margin-top:4px;">0%</div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
 
   <div class="modal fade" id="progressModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -208,7 +211,7 @@
 <!-- Date Range Picker Modal -->
 <div class="modal fade" id="dateRangeModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
-    <div class="modal-content">
+    <div id="dateRangeModalContent" class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">Select Date Range</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -249,6 +252,96 @@
   </div>
 </div>
 
+<!-- Native Observation Modal -->
+<div class="modal fade" id="observationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">New Observation <span id="nativeObsId"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="nativeObservationLoading" class="text-center py-5">
+          <div class="spinner-border text-success" role="status" aria-label="Loading observation"></div>
+          <div class="mt-3">Loading observation details...</div>
+        </div>
+        <form id="observationForm">
+          <input type="hidden" id="nativeObsIdValue">
+          <input type="hidden" id="nativeReplace" value="false">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label for="nativeRoom" class="form-label">Room #</label>
+              <input type="text" id="nativeRoom" class="form-control" required>
+            </div>
+            <div class="col-md-8">
+              <label for="nativeUserSelect" class="form-label">User</label>
+              <select id="nativeUserSelect" class="form-select" onchange="toggleNativeOther('nativeUserSelect', 'nativeUserOther')">
+                <option value="">Select user...</option>
+                <option>Barret</option><option>Greg</option><option>Jason</option>
+                <option>John</option><option>Manuel</option><option>Mario</option>
+                <option>Marlene</option><option>Marta</option><option value="Other">Other</option>
+              </select>
+              <input type="text" id="nativeUserOther" class="form-control mt-2" placeholder="Enter user name" style="display:none;">
+            </div>
+            <div class="col-md-6">
+              <label for="nativeLocation" class="form-label">Location within Room</label>
+              <select id="nativeLocation" class="form-select">
+                <option value="">Select location...</option>
+                <option>Ceiling</option><option>North</option><option>Northeast</option>
+                <option>East</option><option>Southeast</option><option>South</option>
+                <option>Southwest</option><option>West</option><option>Northwest</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label for="nativeResponsible" class="form-label">Who is responsible?</label>
+              <select id="nativeResponsible" class="form-select" onchange="toggleNativeOther('nativeResponsible', 'nativeResponsibleOther')">
+                <option value="">Select responsibility...</option>
+                <option>Electrician/Phone/Cable/other wiring</option>
+                <option>Plumber</option><option>Ceiling</option><option>Flooring</option>
+                <option>Door/Window/Trim/Baseboard</option><option>HVAC</option>
+                <option value="Other">Other</option>
+              </select>
+              <input type="text" id="nativeResponsibleOther" class="form-control mt-2" placeholder="Enter responsibility" style="display:none;">
+            </div>
+            <div class="col-md-6">
+              <label for="nativeStakeholder" class="form-label">Stakeholder</label>
+              <select id="nativeStakeholder" class="form-select" onchange="toggleNativeOther('nativeStakeholder', 'nativeStakeholderOther')">
+                <option value="">Select stakeholder...</option>
+                <option>LSVB - OAG</option><option>LSVB - THC</option><option>LVSB - SORM</option>
+                <option>LVSB - TDLR</option><option>NCSB - TREC</option><option>NCSB - TDLR</option>
+                <option>NCSB - DPS</option><option value="Other">Other</option>
+              </select>
+              <input type="text" id="nativeStakeholderOther" class="form-control mt-2" placeholder="Enter stakeholder" style="display:none;">
+            </div>
+            <div class="col-md-6">
+              <label for="nativePrice" class="form-label">Price Estimate</label>
+              <input type="text" id="nativePrice" class="form-control" inputmode="decimal" placeholder="Optional">
+            </div>
+            <div class="col-12">
+              <label for="nativeIssue" class="form-label">Issue</label>
+              <input type="text" id="nativeIssue" class="form-control" required>
+            </div>
+            <div class="col-12">
+              <label for="nativePhotos" class="form-label">Photos</label>
+              <input type="file" id="nativePhotos" class="form-control" accept="image/*" multiple>
+              <div class="form-text">Photos are automatically resized before upload.</div>
+              <div id="nativePhotoPreview" class="d-flex flex-wrap gap-2 mt-2"></div>
+            </div>
+          </div>
+          <div id="nativeObservationStatus" class="status alert alert-info d-none" role="status" aria-live="polite"></div>
+          <div id="nativeObservationProgress" class="native-observation-progress" style="display:none;" role="progressbar" aria-label="Saving observation">
+            <div class="native-observation-progress-bar"></div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success" id="submitNativeObservation" onclick="submitNativeObservation()" disabled>Save Observation</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 const PROJECT = {{ project|tojson }};
@@ -262,20 +355,25 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 function initProgressTab() {
+  const progressBuilding = document.getElementById('progressBuilding');
+  if (!progressBuilding) return;
   populateProgressBuilding();
   populateProgressStatus();
   resetProgressForm();
-  document.getElementById('progressBuilding').addEventListener('change', onProgressBuildingChange);
+  progressBuilding.addEventListener('change', onProgressBuildingChange);
   document.getElementById('progressFloor').addEventListener('change', onProgressLocationBlur);
   document.getElementById('progressRoom').addEventListener('blur', onProgressLocationBlur);
   const deleteButton = document.getElementById('deleteProgressBtn');
   if (deleteButton) {
     deleteButton.addEventListener('click', showDeleteConfirmation);
   }
-  document.getElementById('newProgressBtn').addEventListener('click', function () {
-    resetProgressForm();
-    showProgressModal();
-  });
+  const newProgressButton = document.getElementById('newProgressBtn');
+  if (newProgressButton) {
+    newProgressButton.addEventListener('click', function () {
+      resetProgressForm();
+      showProgressModal();
+    });
+  }
   const saveButton = document.getElementById('saveProgressBtn');
   if (saveButton) {
     saveButton.addEventListener('click', function () {
@@ -909,11 +1007,238 @@ function startObservationReport(event) {
   const floor = document.getElementById('floorSelect').value;
   if (!building || !floor || currentSeq == null) return;
 
-  // Open the tab synchronously on the click so the browser doesn't block it
-  // after our async round-trip; we set its URL once the server responds.
-  const win = window.open('', '_blank');
-  sendStart(building, floor, currentSeq, !manualAdjusted, false, win);
+  showNativeLoading();
+
+  fetch('/start_native_observation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project: PROJECT, building, floor, seq: currentSeq })
+  })
+    .then(r => r.json().then(data => ({ ok: r.ok, data })))
+    .then(data => {
+      if (!data.ok) throw new Error(data.data.error || 'Could not start observation.');
+      data = data.data;
+      if (data.status === 'exists') {
+        if (window.confirm('This will replace existing observation ' + data.obs_id + '. Continue?')) {
+          startNativeReservation(building, floor, currentSeq, true);
+        } else {
+          bootstrap.Modal.getInstance(document.getElementById('observationModal')).hide();
+        }
+        return;
+      }
+      if (data.status === 'taken') {
+        alert('OBS ID ' + data.obs_id + ' is currently being used by someone else. Please pick a different number.');
+        return;
+      }
+      if (data.status === 'ok') showNativeObservation(data.obs_id, data.user || '', false);
+      else alert(data.error || 'Could not start observation.');
+    })
+    .catch(err => showNativeError('Could not start observation: ' + err.message));
 }
+
+function startNativeReservation(building, floor, seq, replace) {
+  fetch('/start_native_observation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project: PROJECT, building, floor, seq, replace })
+  })
+    .then(r => r.json().then(data => ({ ok: r.ok, data })))
+    .then(data => {
+      if (!data.ok) throw new Error(data.data.error || 'Could not start observation.');
+      data = data.data;
+      if (data.status === 'ok') showNativeObservation(data.obs_id, data.user || '', true);
+      else throw new Error(data.error || 'Could not start observation.');
+    })
+    .catch(err => showNativeError('Could not start observation: ' + err.message));
+}
+
+function showNativeLoading() {
+  document.getElementById('nativeObservationLoading').style.display = '';
+  document.getElementById('observationForm').style.display = 'none';
+  document.getElementById('submitNativeObservation').disabled = true;
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('observationModal')).show();
+}
+
+function getNativeObservationModal() {
+  return bootstrap.Modal.getOrCreateInstance(document.getElementById('observationModal'));
+}
+
+function showNativeError(message) {
+  document.getElementById('nativeObservationLoading').style.display = 'none';
+  document.getElementById('observationForm').style.display = '';
+  const status = document.getElementById('nativeObservationStatus');
+  status.textContent = message;
+  status.className = 'status alert alert-danger';
+}
+
+function showNativeObservation(obsId, user, replace) {
+  document.getElementById('nativeObservationLoading').style.display = 'none';
+  document.getElementById('observationForm').style.display = '';
+  document.getElementById('nativeObsId').textContent = obsId;
+  document.getElementById('nativeObsIdValue').value = obsId;
+  document.getElementById('nativeReplace').value = replace ? 'true' : 'false';
+  document.getElementById('nativeUserSelect').value = user && [...document.getElementById('nativeUserSelect').options].some(option => option.value === user) ? user : (user ? 'Other' : '');
+  document.getElementById('nativeUserOther').value = user && document.getElementById('nativeUserSelect').value === 'Other' ? user : '';
+  toggleNativeOther('nativeUserSelect', 'nativeUserOther');
+  document.getElementById('nativeRoom').value = '';
+  document.getElementById('nativeLocation').value = '';
+  document.getElementById('nativeResponsible').value = '';
+  document.getElementById('nativeResponsibleOther').value = '';
+  document.getElementById('nativeStakeholder').value = '';
+  document.getElementById('nativeStakeholderOther').value = '';
+  document.getElementById('nativePrice').value = '';
+  document.getElementById('nativeIssue').value = '';
+  document.getElementById('nativePhotos').value = '';
+  document.getElementById('nativePhotoPreview').innerHTML = '';
+  const nativeStatus = document.getElementById('nativeObservationStatus');
+  nativeStatus.textContent = '';
+  nativeStatus.className = 'status alert alert-info d-none';
+  document.getElementById('nativeObservationProgress').style.display = 'none';
+  document.getElementById('submitNativeObservation').disabled = false;
+  getNativeObservationModal().show();
+}
+
+function toggleNativeOther(selectId, otherId) {
+  const select = document.getElementById(selectId);
+  const other = document.getElementById(otherId);
+  other.style.display = select.value === 'Other' ? '' : 'none';
+  if (select.value !== 'Other') other.value = '';
+}
+
+function previewNativePhotos() {
+  const preview = document.getElementById('nativePhotoPreview');
+  preview.innerHTML = '';
+  Array.from(document.getElementById('nativePhotos').files || []).forEach(file => {
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(file);
+    img.style.cssText = 'width:72px;height:72px;object-fit:cover;border-radius:6px';
+    preview.appendChild(img);
+  });
+}
+
+function compressNativePhoto(file) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const maxDim = 1600;
+      const scale = Math.min(1, maxDim / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(blob => blob ? resolve(new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' })) : reject(new Error('Could not compress photo')), 'image/jpeg', 0.78);
+    };
+    image.onerror = () => reject(new Error('Could not read photo'));
+    image.src = URL.createObjectURL(file);
+  });
+}
+
+async function submitNativeObservation() {
+  const room = document.getElementById('nativeRoom').value.trim();
+  const issue = document.getElementById('nativeIssue').value.trim();
+  const userSelect = document.getElementById('nativeUserSelect').value;
+  const user = userSelect === 'Other' ? document.getElementById('nativeUserOther').value.trim() : userSelect;
+  const responsibleSelect = document.getElementById('nativeResponsible').value;
+  const responsible = responsibleSelect === 'Other' ? document.getElementById('nativeResponsibleOther').value.trim() : responsibleSelect;
+  const stakeholderSelect = document.getElementById('nativeStakeholder').value;
+  const stakeholder = stakeholderSelect === 'Other' ? document.getElementById('nativeStakeholderOther').value.trim() : stakeholderSelect;
+  const status = document.getElementById('nativeObservationStatus');
+  const submit = document.getElementById('submitNativeObservation');
+  const setNativeStatus = (message, type = 'info') => {
+    status.textContent = message;
+    status.className = 'status alert alert-' + type;
+  };
+  if (!room || !issue) { setNativeStatus('Room and issue are required.', 'warning'); return; }
+  if (userSelect === 'Other' && !user) { setNativeStatus('Enter a user name.', 'warning'); return; }
+  if (responsibleSelect === 'Other' && !responsible) { setNativeStatus('Enter who is responsible.', 'warning'); return; }
+  if (stakeholderSelect === 'Other' && !stakeholder) { setNativeStatus('Enter a stakeholder.', 'warning'); return; }
+  submit.disabled = true;
+  setNativeStatus('Compressing photos...');
+  const progressIndicator = document.getElementById('nativeObservationProgress');
+  progressIndicator.style.display = 'block';
+  try {
+    const files = await Promise.all(Array.from(document.getElementById('nativePhotos').files || []).map(compressNativePhoto));
+    const form = new FormData();
+    form.append('project', PROJECT);
+    form.append('obs_id', document.getElementById('nativeObsIdValue').value);
+    form.append('building', document.getElementById('buildingSelect').value);
+    form.append('floor', document.getElementById('floorSelect').value);
+    form.append('room', room);
+    form.append('issue', issue);
+    form.append('user', user);
+    form.append('location_within_room', document.getElementById('nativeLocation').value);
+    form.append('responsible', responsible);
+    form.append('stakeholder', stakeholder);
+    form.append('price', document.getElementById('nativePrice').value.trim());
+    form.append('replace', document.getElementById('nativeReplace').value);
+    files.forEach(file => form.append('photos', file));
+    setNativeStatus(files.length ? 'Uploading photos and saving...' : 'Saving observation...');
+    const response = await fetch('/submit_native_observation', { method: 'POST', body: form });
+    const responseText = await response.text();
+    let data;
+    try { data = JSON.parse(responseText); } catch (parseError) {
+      throw new Error('Server returned an invalid response (' + response.status + ').');
+    }
+    if (!response.ok || !data.success) throw new Error(data.error || 'Could not save observation');
+    progressIndicator.style.display = 'none';
+    getNativeObservationModal().hide();
+    manualAdjusted = false;
+    updateOBSDisplay();
+    refreshUnpricedBadge();
+  } catch (err) {
+    console.error('Native observation save failed:', err);
+    progressIndicator.style.display = 'none';
+    setNativeStatus(err.message || 'Could not save observation.', 'danger');
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+document.getElementById('nativePhotos').addEventListener('change', previewNativePhotos);
+
+document.getElementById('observationModal').addEventListener('hidden.bs.modal', function () {
+  if (document.querySelectorAll('.modal.show').length === 0) {
+    document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('padding-right');
+  }
+});
+
+/* ---- Side nav controls ---- */
+function openSideNav() {
+  document.getElementById('sidenav').classList.add('open');
+  document.getElementById('sidenavBackdrop').classList.add('open');
+  document.getElementById('menuBtn').classList.add('open');
+}
+function closeSideNav() {
+  document.getElementById('sidenav').classList.remove('open');
+  document.getElementById('sidenavBackdrop').classList.remove('open');
+  document.getElementById('menuBtn').classList.remove('open');
+}
+function toggleSideNav() {
+  const btn = document.getElementById('menuBtn');
+  if (btn.classList.contains('open')) closeSideNav(); else openSideNav();
+}
+function setActiveNav() {
+  const path = window.location.pathname || '/';
+  document.querySelectorAll('.sidenav-link').forEach(a => a.classList.remove('active'));
+  if (path.startsWith('/edit_obs')) document.getElementById('nav-edit').classList.add('active');
+  else if (path.startsWith('/progress')) document.getElementById('nav-progress').classList.add('active');
+  else document.getElementById('nav-home').classList.add('active');
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  const btn = document.getElementById('menuBtn');
+  if (btn) btn.addEventListener('click', function (e) { e.preventDefault(); toggleSideNav(); });
+  const backdrop = document.getElementById('sidenavBackdrop');
+  if (backdrop) backdrop.addEventListener('click', closeSideNav);
+  setActiveNav();
+  // If URL contains hash for progress, reveal it
+  if (window.location.hash && window.location.hash.indexOf('progress') !== -1) {
+    const el = document.getElementById('tab-progress');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  }
+});
 
 function sendStart(building, floor, seq, auto, confirmFlag, win) {
   fetch('/start_observation', {

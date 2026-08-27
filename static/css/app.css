@@ -68,6 +68,10 @@ h1.text-center::after {
   border-top-right-radius: var(--radius);
 }
 
+#dateRangeModalContent {
+  margin-top: 0;
+}
+
 /* ---- Form controls ------------------------------------------------------- */
 .form-label {
   font-weight: 600;
@@ -239,6 +243,32 @@ h1.text-center::after {
 .modal-header, .modal-footer { border-color: var(--border); }
 .modal-title { color: var(--ink); font-weight: 700; }
 
+.native-observation-progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+.native-observation-progress-bar {
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: native-observation-progress 1.1s ease-in-out infinite;
+}
+@keyframes native-observation-progress {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(150%); }
+  100% { transform: translateX(260%); }
+}
+
+/* Keep modal headers clear of the fixed mobile navigation button. */
+@media (max-width: 767px) {
+  .modal-dialog:not(.modal-dialog-centered) {
+    margin: 4.5rem 0.5rem 0.5rem;
+  }
+}
+
 /* ---- Alerts -------------------------------------------------------------- */
 .alert-success {
   background: #ecfbf3;
@@ -269,6 +299,15 @@ h1.text-center::after {
   border-color: #ffd591 !important;
   border-left: 4px solid #f5a623 !important;
 }
+#titleEditPrice {
+  margin-left: 10vw;
+}
+
+@media (max-width: 767px) {
+  .edit-page-header {
+    padding-left: 10vw;
+  }
+}
 
 /* Inline photo thumbnails on the edit modal */
 .photo-thumb {
@@ -286,3 +325,74 @@ h1.text-center::after {
   border-bottom: 1px solid var(--border);
 }
 .photo-thumb-fallback:hover { background: #e7ece9; }
+
+/* ---- Side navigation (mobile hamburger) --------------------------------- */
+.menu-btn {
+  position: fixed;
+  left: 12px;
+  top: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: inline-block;
+  padding: 0;
+  z-index: 1100;
+  box-shadow: 0 2px 8px rgba(16,24,40,.08);
+}
+.menu-btn .bar {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--ink);
+  border-radius: 2px;
+  transition: transform .22s cubic-bezier(.2,.9,.2,1), opacity .18s ease;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.menu-btn .bar1 { top: 10px; }
+.menu-btn .bar2 { top: 20px; }
+.menu-btn .bar3 { top: 30px; }
+.menu-btn.open .bar1 { transform: translateX(-50%) translateY(10px) rotate(45deg); }
+.menu-btn.open .bar2 { opacity: 0; transform: translateX(-50%) scaleX(0); }
+.menu-btn.open .bar3 { transform: translateX(-50%) translateY(-10px) rotate(-45deg); }
+
+.sidenav-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .2s ease, visibility .2s ease;
+  z-index: 1035;
+}
+.sidenav-backdrop.open { opacity: 1; visibility: visible; }
+
+.sidenav {
+  position: fixed;
+  left: -280px;
+  top: 0;
+  height: 100%;
+  width: 260px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  box-shadow: 2px 0 24px rgba(16,24,40,.12);
+  padding: 64px 14px 20px; /* push content down under the fixed menu button */
+  transition: left .22s ease;
+  z-index: 1040;
+}
+.sidenav.open { left: 0; }
+.sidenav .sidenav-header { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:18px; }
+.sidenav .sidenav-header h5 { margin:0; font-size:1rem; padding-right: 72px; }
+.sidenav a.sidenav-link { display:block; padding:10px 8px; border-radius:8px; color:var(--ink); font-weight:600; text-decoration:none; margin-bottom:6px; }
+.sidenav a.sidenav-link:hover { background:var(--surface-2); }
+.sidenav a.sidenav-link.active { background: var(--accent-soft); color: var(--accent); box-shadow: inset 4px 0 0 var(--accent); }
+
+/* Hide the floating hamburger on wide screens and show inline header instead */
+@media (min-width: 768px) {
+  .menu-btn { display: none; }
+  .sidenav { left: 0; position: static; width: auto; height: auto; box-shadow: none; border-right: none; padding: 0; }
+  .sidenav-backdrop { display: none; }
+}

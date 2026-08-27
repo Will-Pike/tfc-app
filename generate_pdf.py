@@ -69,6 +69,7 @@ CLIENT_SECRETS_FILE = "client_secret.json"  # You'll need to create this
 TOKEN_FILE = "token.pickle"
 
 _sa_drive_service = None
+_native_drive_service = None
 def get_sa_drive_service():
     """Drive client authenticated as the service account. Used to download
     form-uploaded photos, which are NOT public — an unauthenticated fetch gets
@@ -80,6 +81,55 @@ def get_sa_drive_service():
             SERVICE_FILE, scopes=['https://www.googleapis.com/auth/drive.readonly'])
         _sa_drive_service = build('drive', 'v3', credentials=creds)
     return _sa_drive_service
+
+def get_native_drive_service():
+    """Drive client used for app-created observation photos.
+
+    The service account must have Editor access to DRIVE_FOLDER_ID in a Shared
+    Drive. Personal Drive uploads must use the OAuth service below.
+    """
+    global _native_drive_service
+    if _native_drive_service is None:
+        creds = Credentials.from_service_account_file(
+            SERVICE_FILE, scopes=['https://www.googleapis.com/auth/drive.file'])
+        _native_drive_service = build('drive', 'v3', credentials=creds)
+    return _native_drive_service
+
+def upload_native_photo_to_drive(file_data, filename, project, obs_id, mimetype='image/jpeg'):
+    """Upload an app-compressed photo using personal OAuth Drive quota.
+
+    The service-account fallback works only when DRIVE_FOLDER_ID is in a
+    Shared Drive, because service accounts have no personal Drive quota.
+    """
+    unique_filename = f"{project}_{obs_id}_{int(time.time() * 1000)}_{filename}"
+    file_metadata = {'name': unique_filename, 'parents': [DRIVE_FOLDER_ID]}
+    try:
+        media = MediaIoBaseUpload(io.BytesIO(file_data), mimetype=mimetype, resumable=True)
+        service = get_oauth_drive_service()
+        if service:
+            result = service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields='id'
+            ).execute()
+            file_id = result.get('id')
+            return f"https://drive.google.com/open?id={file_id}" if file_id else None
+    except Exception as e:
+        print(f"OAuth native photo upload failed: {e}")
+
+    try:
+        media = MediaIoBaseUpload(io.BytesIO(file_data), mimetype=mimetype, resumable=True)
+        result = get_native_drive_service().files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id',
+            supportsAllDrives=True
+        ).execute()
+        file_id = result.get('id')
+        return f"https://drive.google.com/open?id={file_id}" if file_id else None
+    except Exception as e:
+        print(f"Shared Drive native photo upload failed: {e}")
+        return None
 
 def download_drive_image(file_id, dest_path):
     """Download a Drive file by ID to dest_path. Tries the authenticated service
@@ -634,7 +684,7 @@ def get_project_context(project):
     """Single sheet read -> next sequence number plus the most-recent row's
     building/floor/user, used to default the home-page dropdowns and prefill the
     submitter on the form."""
-    ctx = {"next_seq": 1, "building": "", "floor": "", "user": ""}
+    ctx = {"next_seq": 1, "building": "", "floor": "", "user": "", "obs_ids": set()}
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_FILE, scope)
@@ -647,6 +697,8 @@ def get_project_context(project):
         highest = 0
         for r in proj_rows:
             obs_id = r.get("OBS ID#", "")
+            if obs_id != "":
+                ctx["obs_ids"].add(str(obs_id))
             try:
                 obs_number = int(str(obs_id).split('-')[-1]) if obs_id != "" else 0
                 highest = max(highest, obs_number)
@@ -831,6 +883,37 @@ def update_obs_in_spreadsheet(project, obs_id, updated_data):
         return False
     except Exception as e:
         print(f"Error updating OBS: {e}")
+        return False
+
+def append_obs_to_spreadsheet(project, obs_id, data, photo_urls=None):
+    """Append one native observation using the response sheet's header order."""
+    try:
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_FILE, scope)
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(SPREADSHEET_ID).sheet1
+        headers = sheet.row_values(1)
+        values = {
+            'Timestamp': time.strftime('%m/%d/%Y %H:%M:%S'),
+            'Project': project,
+            'OBS ID#': obs_id,
+            BUILDING_COLUMN: data.get('building', ''),
+            'Floor:': data.get('floor', ''),
+            'Room:': data.get('room', ''),
+            'Location within Room': data.get('location_within_room', ''),
+            'Issue:': data.get('issue', ''),
+            'User:': data.get('user', ''),
+            'Who is responsible?': data.get('responsible', ''),
+            'Stakeholder': data.get('stakeholder', ''),
+            PRICE_COLUMN: data.get('price', ''),
+            'Upload photo:': ', '.join(photo_urls or [])
+        }
+        normalized_values = {key.rstrip(':').strip(): value for key, value in values.items()}
+        row = [normalized_values.get(header.rstrip(':').strip(), '') for header in headers]
+        sheet.append_row(row, value_input_option='USER_ENTERED')
+        return True
+    except Exception as e:
+        print(f"Error appending native OBS {obs_id}: {e}")
         return False
 
 def debug_spreadsheet_data(project, obs_id):

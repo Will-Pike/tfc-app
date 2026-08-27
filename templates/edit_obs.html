@@ -15,8 +15,25 @@
   </style>
 </head>
 <body>
+  <!-- Hamburger / Side nav -->
+  <button class="menu-btn" id="menuBtn" aria-label="Open navigation">
+    <span class="bar bar1"></span>
+    <span class="bar bar2"></span>
+    <span class="bar bar3"></span>
+  </button>
+  <div class="sidenav-backdrop" id="sidenavBackdrop" onclick="closeSideNav()"></div>
+  <nav class="sidenav" id="sidenav">
+    <div class="sidenav-header">
+      <h5>Navigation</h5>
+      <a href="#" onclick="closeSideNav();return false;">Close</a>
+    </div>
+    <a href="/" class="sidenav-link" id="nav-home">Observations</a>
+    <a href="/progress" class="sidenav-link" id="nav-progress">Progress</a>
+    <a href="/edit_obs?project={{ project }}" class="sidenav-link" id="nav-edit">Edit / Price</a>
+  </nav>
+
 <div class="container">
-  <div class="d-flex justify-content-between align-items-center mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-4 edit-page-header">
     <h1 class="h3 mb-0">Edit / Price OBS Reports</h1>
     <a href="/" class="btn btn-secondary" style="width:auto;">Back to Main</a>
   </div>
@@ -149,6 +166,11 @@ const BUILDINGS = {{ buildings|tojson }};
 let obsCache = [];
 
 document.addEventListener('DOMContentLoaded', function() {
+  const btn = document.getElementById('menuBtn');
+  if (btn) btn.addEventListener('click', function (e) { e.preventDefault(); toggleSideNav(); });
+  const backdrop = document.getElementById('sidenavBackdrop');
+  if (backdrop) backdrop.addEventListener('click', closeSideNav);
+  setActiveNav();
   // Populate the building dropdown in the edit modal
   const sel = document.getElementById('editBuilding');
   Object.keys(BUILDINGS).forEach(name => {
@@ -171,6 +193,29 @@ function loadObsList() {
       document.getElementById('obsListContainer').innerHTML =
         '<p class="text-danger">Error loading OBS reports.</p>';
     });
+}
+
+/* ---- Side nav controls (shared) ---- */
+function openSideNav() {
+  document.getElementById('sidenav').classList.add('open');
+  document.getElementById('sidenavBackdrop').classList.add('open');
+  document.getElementById('menuBtn').classList.add('open');
+}
+function closeSideNav() {
+  document.getElementById('sidenav').classList.remove('open');
+  document.getElementById('sidenavBackdrop').classList.remove('open');
+  document.getElementById('menuBtn').classList.remove('open');
+}
+function toggleSideNav() {
+  const btn = document.getElementById('menuBtn');
+  if (btn.classList.contains('open')) closeSideNav(); else openSideNav();
+}
+function setActiveNav() {
+  const path = window.location.pathname || '/';
+  document.querySelectorAll('.sidenav-link').forEach(a => a.classList.remove('active'));
+  if (path.startsWith('/edit_obs')) document.getElementById('nav-edit').classList.add('active');
+  else if (path.startsWith('/progress')) document.getElementById('nav-progress').classList.add('active');
+  else document.getElementById('nav-home').classList.add('active');
 }
 
 function renderObsList() {
