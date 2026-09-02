@@ -466,8 +466,8 @@ def submit_native_observation():
     reservation_key = None
     if obs_id:
         reservation_key = f"obs:resv:{project}:{obs_id.rsplit('-', 1)[-1]}"
-    if not project or project not in get_projects() or not obs_id or building not in get_buildings() or not floor or not room or not issue:
-        return jsonify({"error": "Building, floor, room, and issue are required."}), 400
+    if not project or project not in get_projects() or not obs_id or building not in get_buildings() or not floor or not room:
+        return jsonify({"error": "Building, floor, and room are required."}), 400
     try:
         from generate_pdf import append_obs_to_spreadsheet, delete_obs_rows, upload_native_photo_to_drive
         photo_urls = []

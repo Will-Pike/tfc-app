@@ -319,7 +319,7 @@
             </div>
             <div class="col-12">
               <label for="nativeIssue" class="form-label">Issue</label>
-              <input type="text" id="nativeIssue" class="form-control" required>
+              <input type="text" id="nativeIssue" class="form-control">
             </div>
             <div class="col-12">
               <label for="nativePhotos" class="form-label">Photos</label>
@@ -1148,7 +1148,7 @@ async function submitNativeObservation() {
     status.textContent = message;
     status.className = 'status alert alert-' + type;
   };
-  if (!room || !issue) { setNativeStatus('Room and issue are required.', 'warning'); return; }
+  if (!room) { setNativeStatus('Room is required.', 'warning'); return; }
   if (userSelect === 'Other' && !user) { setNativeStatus('Enter a user name.', 'warning'); return; }
   if (responsibleSelect === 'Other' && !responsible) { setNativeStatus('Enter who is responsible.', 'warning'); return; }
   if (stakeholderSelect === 'Other' && !stakeholder) { setNativeStatus('Enter a stakeholder.', 'warning'); return; }
