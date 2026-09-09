@@ -12,6 +12,85 @@
   <link href="{{ url_for('static', filename='css/app.css') }}" rel="stylesheet">
   <style>
     body { padding: 20px; }
+    .desktop-save-bar,
+    .desktop-load-progress { display: none; }
+    @media (min-width: 992px) {
+      .container { max-width: none; }
+      #obsListCard { margin-bottom: 96px !important; }
+      #obsListCard > .card-body { padding: 1rem; }
+      .desktop-load-progress {
+        display: none;
+        margin: 0 0 1rem;
+      }
+      .desktop-load-progress.active { display: block; }
+      .desktop-load-progress .progress { height: 8px; }
+      .desktop-save-bar {
+        align-items: center;
+        background: rgba(255, 255, 255, .96);
+        border: 1px solid var(--border);
+        border-radius: 0 var(--radius) 0 0;
+        bottom: 0;
+        box-shadow: 0 -8px 24px rgba(16, 24, 40, .12);
+        display: flex;
+        gap: .75rem;
+        left: 0;
+        padding: .8rem 1rem;
+        position: fixed;
+        z-index: 1060;
+      }
+      .desktop-save-bar .btn { margin: 0; min-width: 150px; }
+      .desktop-save-bar .save-status { min-width: 180px; }
+      .desktop-obs-card {
+        align-items: stretch;
+        display: grid;
+        gap: 1.25rem;
+        grid-template-columns: minmax(220px, 28%) minmax(0, 1fr) minmax(280px, 34%);
+        min-height: 240px;
+        padding: 1.25rem;
+      }
+      .desktop-obs-card .obs-card-photo {
+        align-items: center;
+        background: var(--surface-2);
+        border-radius: var(--radius-sm);
+        cursor: zoom-in;
+        display: flex;
+        justify-content: center;
+        min-height: 200px;
+        overflow: hidden;
+        position: relative;
+      }
+      .desktop-obs-card .obs-card-photo img {
+        height: 100%;
+        max-height: 230px;
+        max-width: 100%;
+        object-fit: contain;
+        width: 100%;
+      }
+      .desktop-obs-card .obs-card-photo.no-photo { cursor: default; }
+      .desktop-obs-card .photo-count {
+        background: rgba(0, 0, 0, .68);
+        border-radius: 999px;
+        bottom: .6rem;
+        color: #fff;
+        font-size: .75rem;
+        left: .6rem;
+        padding: .25rem .55rem;
+        position: absolute;
+      }
+      .desktop-obs-card .obs-card-main { min-width: 0; }
+      .desktop-obs-card .obs-card-meta { color: var(--muted); font-size: .85rem; }
+      .desktop-obs-card .obs-card-description {
+        margin-top: .75rem;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .desktop-obs-card .obs-card-controls {
+        align-self: center;
+        border-left: 1px solid var(--border);
+        padding-left: 1.25rem;
+      }
+      .desktop-obs-card .obs-card-controls .form-label { margin-top: .5rem; }
+    }
   </style>
 </head>
 <body>
@@ -55,7 +134,36 @@
 
   <div class="card mb-4" id="obsListCard">
     <div class="card-body">
+      <div class="desktop-load-progress" id="desktopLoadProgress" aria-live="polite">
+        <div class="d-flex justify-content-between small text-muted mb-1">
+          <span>Loading observation photos...</span>
+          <span id="desktopLoadProgressText">0 / 0</span>
+        </div>
+        <div class="progress" role="progressbar" aria-label="Loading observation photos">
+          <div class="progress-bar progress-bar-striped progress-bar-animated" id="desktopLoadProgressBar" style="width:0%"></div>
+        </div>
+      </div>
       <div id="obsListContainer"><p class="text-muted">Loading…</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="desktop-save-bar" id="desktopSaveBar">
+  <button type="button" class="btn btn-primary" id="desktopSaveButton" onclick="saveDesktopChanges()">Save changes</button>
+  <span class="save-status text-muted small" id="desktopSaveStatus">No changes</span>
+</div>
+
+<!-- Full-size observation photo -->
+<div class="modal fade" id="photoModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content bg-dark">
+      <div class="modal-header border-0">
+        <h5 class="modal-title text-white" id="photoModalLabel">Observation photo</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-center p-2">
+        <img id="photoModalImage" src="" alt="Full-size observation photo" style="max-width:100%;max-height:75vh;object-fit:contain;">
+      </div>
     </div>
   </div>
 </div>
@@ -119,17 +227,32 @@
           </div>
 
           <div class="mb-3">
-            <label for="editResponsible" class="form-label">Who is responsible?</label>
+            <label for="editResponsible" class="form-label">Issue Type</label>
             <select class="form-select" id="editResponsible" onchange="toggleOtherField()">
-              <option value="">Select responsible party...</option>
-              <option value="Electrician/Phone/Cable/other wiring">Electrician/Phone/Cable/other wiring</option>
-              <option value="Plumber">Plumber</option>
-              <option value="Ceiling">Ceiling</option>
-              <option value="Flooring">Flooring</option>
-              <option value="Door/Window/Trim/Baseboard">Door/Window/Trim/Baseboard</option>
-              <option value="HVAC">HVAC</option>
-              <option value="Other...">Other...</option>
+              <option value="">Select issue type...</option>
+              <option>Non-defined</option>
+              <option>Water Damage</option>
+              <option>Furniture Changes</option>
+              <option>Mechanical Changes</option>
+              <option>TI/Core Changes</option>
+              <option>Out of Sequence</option>
+              <option value="Other">Other</option>
             </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="editStakeholder" class="form-label">Payment responsibility:</label>
+            <select class="form-select" id="editStakeholder" onchange="toggleStakeholderOther()">
+              <option value="">Select payment responsibility...</option>
+              <option>LSVB - OAG</option><option>LSVB - THC</option><option>LVSB - SORM</option>
+              <option>LVSB - TDLR</option><option>NCSB - TREC</option><option>NCSB - TDLR</option>
+              <option>NCSB - DPS</option><option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div class="mb-3" id="otherStakeholderDiv" style="display:none;">
+            <label for="editOtherStakeholder" class="form-label">Specify other:</label>
+            <input type="text" class="form-control" id="editOtherStakeholder" />
           </div>
 
           <div class="mb-3" id="otherResponsibleDiv" style="display:none;">
@@ -164,6 +287,8 @@
 const PROJECT = {{ project|tojson }};
 const BUILDINGS = {{ buildings|tojson }};
 let obsCache = [];
+const desktopChanges = new Map();
+const ISSUE_TYPES = ['Non-defined', 'Water Damage', 'Furniture Changes', 'Mechanical Changes', 'TI/Core Changes', 'Out of Sequence'];
 
 document.addEventListener('DOMContentLoaded', function() {
   const btn = document.getElementById('menuBtn');
@@ -219,6 +344,11 @@ function setActiveNav() {
 }
 
 function renderObsList() {
+  if (window.innerWidth >= 992) {
+    renderDesktopObsList();
+    return;
+  }
+
   const container = document.getElementById('obsListContainer');
   const onlyNeedsPrice = document.getElementById('needsPriceFilter').checked;
   const needsCount = obsCache.filter(o => o.needs_price).length;
@@ -260,6 +390,155 @@ function renderObsList() {
   });
 }
 
+function photoUrlsForObs(obs) {
+  return String(obs.photo_url || '').split(/[,\s\n\r]+/)
+    .map(url => url.trim()).filter(url => url && url.startsWith('http'));
+}
+
+function photoProxyUrl(url) {
+  return '/photo_proxy?src=' + encodeURIComponent(url);
+}
+
+function renderDesktopObsList() {
+  const container = document.getElementById('obsListContainer');
+  const onlyNeedsPrice = document.getElementById('needsPriceFilter').checked;
+  const needsCount = obsCache.filter(o => o.needs_price).length;
+  const list = onlyNeedsPrice ? obsCache.filter(o => o.needs_price) : obsCache;
+  const progress = document.getElementById('desktopLoadProgress');
+  const progressBar = document.getElementById('desktopLoadProgressBar');
+  const progressText = document.getElementById('desktopLoadProgressText');
+  const imageTotal = list.reduce((total, obs) => total + (photoUrlsForObs(obs).length ? 1 : 0), 0);
+
+  document.getElementById('summaryLine').textContent =
+    `${obsCache.length} report(s) · ${needsCount} need pricing`;
+  container.innerHTML = '';
+  desktopPhotoLoaded.count = 0;
+  desktopPhotoLoaded.total = imageTotal;
+  progress.classList.toggle('active', imageTotal > 0);
+  progressText.textContent = `0 / ${imageTotal}`;
+  progressBar.style.width = imageTotal ? '0%' : '100%';
+
+  if (list.length === 0) {
+    container.innerHTML = onlyNeedsPrice
+      ? '<p class="text-muted">No reports are awaiting a price.</p>'
+      : '<p class="text-muted">No OBS reports found for this project.</p>';
+    progress.classList.remove('active');
+    return;
+  }
+
+  list.forEach(obs => {
+    const item = document.createElement('div');
+    item.className = 'desktop-obs-card obs-item border rounded mb-3' + (obs.needs_price ? ' needs-price' : '');
+    item.dataset.obsId = obs.obs_id;
+    item.onclick = () => selectObs(item, obs.obs_id);
+
+    const urls = photoUrlsForObs(obs);
+    const firstPhoto = urls[0];
+    const imageHtml = firstPhoto
+      ? `<img src="${photoProxyUrl(firstPhoto)}" alt="Photo for OBS ${obs.obs_id}" loading="lazy" onload="desktopPhotoLoaded()" onerror="desktopPhotoLoaded()">${urls.length > 1 ? `<span class="photo-count">${urls.length} photos</span>` : ''}`
+      : '<span class="text-muted small">No photo uploaded</span>';
+    const issueType = obs.responsible || '';
+    const issueOptions = ['<option value="">Select issue type...</option>']
+      .concat(ISSUE_TYPES.map(type => `<option value="${type}"${issueType === type ? ' selected' : ''}>${type}</option>`))
+      .concat([`<option value="Other"${issueType && !ISSUE_TYPES.includes(issueType) ? ' selected' : ''}>Other</option>`])
+      .join('');
+    const otherValue = issueType && !ISSUE_TYPES.includes(issueType) ? issueType : '';
+    const otherHtml = `<input type="text" class="form-control mt-2 desktop-other-issue" value="${otherValue}" placeholder="Enter issue type" style="display:${otherValue ? 'block' : 'none'};">`;
+    const loc = [obs.building, obs.floor ? 'Floor ' + obs.floor : '', obs.room].filter(Boolean).join(' · ');
+
+    item.innerHTML = `
+      <div class="obs-card-photo${firstPhoto ? '' : ' no-photo'}" ${firstPhoto ? `onclick="openPhotoModal(event, '${encodeURIComponent(firstPhoto)}', 'OBS ${obs.obs_id}')"` : ''}>${imageHtml}</div>
+      <div class="obs-card-main">
+        <div class="d-flex justify-content-between align-items-start gap-2">
+          <div>
+            <strong>OBS ${obs.obs_id}</strong>
+            <div class="obs-card-meta">${obs.date || ''}</div>
+          </div>
+          <span class="badge text-bg-${obs.needs_price ? 'warning' : 'success'}">${obs.needs_price ? 'Needs price' : '$' + obs.price}</span>
+        </div>
+        <div class="obs-card-meta mt-2">${loc}</div>
+        <div class="obs-card-description">${obs.issue || 'No description provided.'}</div>
+      </div>
+      <div class="obs-card-controls">
+        <label class="form-label" for="desktop-issue-${obs.obs_id}">Issue Type</label>
+        <select class="form-select desktop-issue-select" id="desktop-issue-${obs.obs_id}">${issueOptions}</select>
+        ${otherHtml}
+        <label class="form-label" for="desktop-price-${obs.obs_id}">Price Estimate</label>
+        <div class="input-group">
+          <span class="input-group-text">$</span>
+          <input type="text" class="form-control desktop-price-input" id="desktop-price-${obs.obs_id}" value="${obs.price || ''}" placeholder="Optional">
+        </div>
+        <button type="button" class="btn btn-outline-secondary w-100 mt-3" onclick="event.stopPropagation(); selectObs(this.closest('.desktop-obs-card'), '${obs.obs_id}')">Open details</button>
+      </div>`;
+
+    const issueSelect = item.querySelector('.desktop-issue-select');
+    const otherInput = item.querySelector('.desktop-other-issue');
+    const priceInput = item.querySelector('.desktop-price-input');
+    issueSelect.addEventListener('click', event => event.stopPropagation());
+    priceInput.addEventListener('click', event => event.stopPropagation());
+    otherInput.addEventListener('click', event => event.stopPropagation());
+    issueSelect.addEventListener('change', () => {
+      otherInput.style.display = issueSelect.value === 'Other' ? 'block' : 'none';
+      if (issueSelect.value !== 'Other') otherInput.value = '';
+      markDesktopChange(obs.obs_id, item);
+    });
+    otherInput.addEventListener('input', () => markDesktopChange(obs.obs_id, item));
+    priceInput.addEventListener('input', () => markDesktopChange(obs.obs_id, item));
+    container.appendChild(item);
+  });
+}
+
+function desktopPhotoLoaded() {
+  desktopPhotoLoaded.count += 1;
+  const total = desktopPhotoLoaded.total || 0;
+  const progress = document.getElementById('desktopLoadProgress');
+  if (!total) return;
+  document.getElementById('desktopLoadProgressText').textContent = `${desktopPhotoLoaded.count} / ${total}`;
+  document.getElementById('desktopLoadProgressBar').style.width = `${Math.min(100, desktopPhotoLoaded.count / total * 100)}%`;
+  if (desktopPhotoLoaded.count >= total) progress.classList.remove('active');
+}
+desktopPhotoLoaded.count = 0;
+desktopPhotoLoaded.total = 0;
+
+function markDesktopChange(obsId, card) {
+  const select = card.querySelector('.desktop-issue-select');
+  const other = card.querySelector('.desktop-other-issue');
+  const price = card.querySelector('.desktop-price-input');
+  const issueType = select.value === 'Other' ? other.value.trim() : select.value;
+  desktopChanges.set(obsId, { issueType, price: price.value.trim() });
+  document.getElementById('desktopSaveStatus').textContent = `${desktopChanges.size} report(s) changed`;
+}
+
+function openPhotoModal(event, encodedUrl, obsLabel) {
+  event.stopPropagation();
+  document.getElementById('photoModalLabel').textContent = obsLabel;
+  document.getElementById('photoModalImage').src = photoProxyUrl(decodeURIComponent(encodedUrl));
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('photoModal')).show();
+}
+
+async function saveDesktopChanges() {
+  if (!desktopChanges.size) return;
+  const saveButton = document.getElementById('desktopSaveButton');
+  const status = document.getElementById('desktopSaveStatus');
+  const changes = [...desktopChanges.entries()];
+  saveButton.disabled = true;
+  status.textContent = `Saving ${changes.length} report(s)...`;
+  const results = await Promise.allSettled(changes.map(([obsId, change]) => fetch('/update_obs', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ project: PROJECT, obs_id: obsId, responsible: change.issueType, price: change.price })
+  }).then(response => response.json().then(data => ({ response, data })))));
+  const failed = results.filter(result => result.status === 'rejected' || !result.value.response.ok || !result.value.data.success);
+  if (failed.length) {
+    status.textContent = `${failed.length} report(s) failed to save.`;
+  } else {
+    desktopChanges.clear();
+    status.textContent = 'All changes saved.';
+    loadObsList();
+  }
+  saveButton.disabled = false;
+}
+
 function selectObs(element, obsId) {
   document.querySelectorAll('.obs-item').forEach(i => i.classList.remove('selected-obs'));
   element.classList.add('selected-obs');
@@ -281,13 +560,28 @@ function loadObsDetails(obsId) {
       document.getElementById('editIssue').value = data.issue || '';
       document.getElementById('editPrice').value = data.price || '';
 
+      const stakeholder = data.stakeholder || '';
+      const stakeholderOptions = [...document.getElementById('editStakeholder').options].map(option => option.value);
+      if (stakeholderOptions.includes(stakeholder)) {
+        document.getElementById('editStakeholder').value = stakeholder;
+        document.getElementById('otherStakeholderDiv').style.display = 'none';
+      } else if (stakeholder) {
+        document.getElementById('editStakeholder').value = 'Other';
+        document.getElementById('editOtherStakeholder').value = stakeholder;
+        document.getElementById('otherStakeholderDiv').style.display = 'block';
+      } else {
+        document.getElementById('editStakeholder').value = '';
+        document.getElementById('editOtherStakeholder').value = '';
+        document.getElementById('otherStakeholderDiv').style.display = 'none';
+      }
+
       const responsible = data.responsible || '';
-      const known = ['Electrician/Phone/Cable/other wiring', 'Plumber', 'Ceiling', 'Flooring', 'Door/Window/Trim/Baseboard', 'HVAC'];
+      const known = ['Non-defined', 'Water Damage', 'Furniture Changes', 'Mechanical Changes', 'TI/Core Changes', 'Out of Sequence'];
       if (known.includes(responsible)) {
         document.getElementById('editResponsible').value = responsible;
         document.getElementById('otherResponsibleDiv').style.display = 'none';
       } else if (responsible) {
-        document.getElementById('editResponsible').value = 'Other...';
+        document.getElementById('editResponsible').value = 'Other';
         document.getElementById('editOtherResponsible').value = responsible;
         document.getElementById('otherResponsibleDiv').style.display = 'block';
       } else {
@@ -364,13 +658,22 @@ function deletePhoto(photoIndex, photoUrl) {
 function toggleOtherField() {
   const responsible = document.getElementById('editResponsible').value;
   const otherDiv = document.getElementById('otherResponsibleDiv');
-  if (responsible === 'Other...') { otherDiv.style.display = 'block'; }
+  if (responsible === 'Other') { otherDiv.style.display = 'block'; }
   else { otherDiv.style.display = 'none'; document.getElementById('editOtherResponsible').value = ''; }
+}
+
+function toggleStakeholderOther() {
+  const stakeholder = document.getElementById('editStakeholder').value;
+  const otherDiv = document.getElementById('otherStakeholderDiv');
+  if (stakeholder === 'Other') { otherDiv.style.display = 'block'; }
+  else { otherDiv.style.display = 'none'; document.getElementById('editOtherStakeholder').value = ''; }
 }
 
 function saveChanges() {
   const responsible = document.getElementById('editResponsible').value;
-  const finalResponsible = responsible === 'Other...' ? document.getElementById('editOtherResponsible').value : responsible;
+  const finalResponsible = responsible === 'Other' ? document.getElementById('editOtherResponsible').value : responsible;
+  const stakeholder = document.getElementById('editStakeholder').value;
+  const finalStakeholder = stakeholder === 'Other' ? document.getElementById('editOtherStakeholder').value : stakeholder;
 
   const formData = {
     project: PROJECT,
@@ -381,7 +684,8 @@ function saveChanges() {
     room: document.getElementById('editRoom').value,
     issue: document.getElementById('editIssue').value,
     price: document.getElementById('editPrice').value.trim(),
-    responsible: finalResponsible
+    responsible: finalResponsible,
+    stakeholder: finalStakeholder
   };
 
   document.getElementById('saveStatus').innerHTML = '<div class="alert alert-info py-1">Saving...</div>';

@@ -293,18 +293,21 @@
               </select>
             </div>
             <div class="col-md-6">
-              <label for="nativeResponsible" class="form-label">Who is responsible?</label>
+              <label for="nativeResponsible" class="form-label">Issue Type</label>
               <select id="nativeResponsible" class="form-select" onchange="toggleNativeOther('nativeResponsible', 'nativeResponsibleOther')">
-                <option value="">Select responsibility...</option>
-                <option>Electrician/Phone/Cable/other wiring</option>
-                <option>Plumber</option><option>Ceiling</option><option>Flooring</option>
-                <option>Door/Window/Trim/Baseboard</option><option>HVAC</option>
+                <option value="">Select issue type...</option>
+                <option>Non-defined</option>
+                <option>Water Damage</option>
+                <option>Furniture Changes</option>
+                <option>Mechanical Changes</option>
+                <option>TI/Core Changes</option>
+                <option>Out of Sequence</option>
                 <option value="Other">Other</option>
               </select>
-              <input type="text" id="nativeResponsibleOther" class="form-control mt-2" placeholder="Enter responsibility" style="display:none;">
+              <input type="text" id="nativeResponsibleOther" class="form-control mt-2" placeholder="Enter issue type" style="display:none;">
             </div>
             <div class="col-md-6">
-              <label for="nativeStakeholder" class="form-label">Stakeholder</label>
+              <label for="nativeStakeholder" class="form-label">Payment responsibility:</label>
               <select id="nativeStakeholder" class="form-select" onchange="toggleNativeOther('nativeStakeholder', 'nativeStakeholderOther')">
                 <option value="">Select stakeholder...</option>
                 <option>LSVB - OAG</option><option>LSVB - THC</option><option>LVSB - SORM</option>

@@ -24,6 +24,7 @@ import io
 from googleapiclient.http import MediaIoBaseUpload
 import pickle
 import os
+import threading
 from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
@@ -34,7 +35,7 @@ import time
 SERVICE_FILE = os.getenv("SERVICE_FILE", "./service-account.json")
 # Response Sheet for the TFC form. Override via env so this fork points at the
 # TFC sheet rather than Schnurr's.
-SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "16xuo0Uuyku5qD5Ul6VDO86I3rVSFzUedgVXMKfUv5CE")
+SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1x5fYPiP5ZQT62WNswsIpmafutovqmtCmKwAgxBH84Tg")
 
 # Column header names in the response Sheet. Building and price are new for TFC;
 # the description stays in the existing "Issue:" column. Override via env if the
@@ -68,19 +69,20 @@ SCOPES = ['https://www.googleapis.com/auth/drive.file']
 CLIENT_SECRETS_FILE = "client_secret.json"  # You'll need to create this
 TOKEN_FILE = "token.pickle"
 
-_sa_drive_service = None
+_sa_drive_services = threading.local()
 _native_drive_service = None
 def get_sa_drive_service():
     """Drive client authenticated as the service account. Used to download
     form-uploaded photos, which are NOT public — an unauthenticated fetch gets
     an HTML interstitial, not the image. Requires the photos' folder to be
     shared with the service account."""
-    global _sa_drive_service
-    if _sa_drive_service is None:
+    service = getattr(_sa_drive_services, 'service', None)
+    if service is None:
         creds = Credentials.from_service_account_file(
             SERVICE_FILE, scopes=['https://www.googleapis.com/auth/drive.readonly'])
-        _sa_drive_service = build('drive', 'v3', credentials=creds)
-    return _sa_drive_service
+        service = build('drive', 'v3', credentials=creds)
+        _sa_drive_services.service = service
+    return service
 
 def get_native_drive_service():
     """Drive client used for app-created observation photos.
@@ -737,6 +739,8 @@ def get_obs_list_for_project(project):
                     "room": row.get("Room:", ""),
                     "issue": row.get("Issue:", ""),
                     "user": row.get("User:", ""),
+                    "responsible": row.get("Who is responsible?", ""),
+                    "photo_url": row.get("Upload photo:", ""),
                     "price": price,
                     "needs_price": price == ""
                 })
@@ -791,13 +795,14 @@ def get_obs_details(project, obs_id):
                     "room": row.get("Room:", ""),
                     "issue": row.get("Issue:", ""),
                     "responsible": row.get("Who is responsible?", ""),
+                    "stakeholder": row.get("Stakeholder", ""),
                     "price": row.get(PRICE_COLUMN, ""),
                     "photo_url": photo_url
                 }
 
                 # Add any additional fields dynamically
                 standard_fields = {"Project", "OBS ID#", "Timestamp", BUILDING_COLUMN, "Floor:", "Room:", "User:",
-                                 "Issue:", "Who is responsible?", "Upload photo:", "Estimated Cost", PRICE_COLUMN, "row_index"}
+                                 "Issue:", "Who is responsible?", "Stakeholder", "Upload photo:", "Estimated Cost", PRICE_COLUMN, "row_index"}
                 for key, value in row.items():
                     if key not in standard_fields and value:
                         response[key] = value
@@ -875,6 +880,8 @@ def update_obs_in_spreadsheet(project, obs_id, updated_data):
                     sheet.update_cell(row_index, column_map[PRICE_COLUMN], updated_data['price'])
                 if 'responsible' in updated_data and 'Who is responsible?' in column_map:
                     sheet.update_cell(row_index, column_map['Who is responsible?'], updated_data['responsible'])
+                if 'stakeholder' in updated_data and 'Stakeholder' in column_map:
+                    sheet.update_cell(row_index, column_map['Stakeholder'], updated_data['stakeholder'])
                 # Handle photo URL updates if needed
                 if 'photo_urls' in updated_data and 'Upload photo:' in column_map:
                     sheet.update_cell(row_index, column_map['Upload photo:'], updated_data['photo_urls'])
