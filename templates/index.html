@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TFC Inspection OBS Generator</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -16,6 +17,15 @@
     .modal-footer .btn { width: auto !important; margin-top: 0 !important; min-width: 120px; }
     .status { margin-top: 15px; text-align: center; }
     .pdf-button { margin-top: 1vh; width: 100%; }
+    .report-download-btn {
+      align-items: center;
+      display: flex !important;
+      gap: .7rem;
+      justify-content: flex-start;
+      margin-top: 15px;
+      width: 100%;
+    }
+    .report-download-btn .file-icon { margin-left: auto; }
     @media (max-width: 576px) {
       .modal-footer { justify-content: space-between; }
       .modal-footer .btn { flex: 1 1 45%; }
@@ -106,9 +116,15 @@
 
         <div id="downloadSection" style="display:none; margin-top:20px;">
           <div id="downloadMessage" class="alert alert-success" role="alert">Reports are ready for download!</div>
-          <a href="#" id="downloadPdfBtn" class="btn btn-primary" style="display:block; width:100%; margin-bottom:15px;" download>Download PDF Report</a>
-          <a href="#" id="downloadCsvBtn" class="btn btn-info" style="display:block; width:100%; margin-top:15px;" download>Download Spreadsheet Report</a>
-          <a href="#" id="downloadIssueMatrixBtn" class="btn btn-secondary" style="display:block; width:100%; margin-top:15px;" download>By Issue Category</a>
+          <a href="#" id="downloadPdfBtn" class="btn btn-primary report-download-btn" style="display:none;" download>
+            <i class="fas fa-download" aria-hidden="true"></i><span>PDF</span><i class="fas fa-file-pdf file-icon" aria-hidden="true"></i>
+          </a>
+          <a href="#" id="downloadCsvBtn" class="btn btn-primary report-download-btn" style="display:none;" download>
+            <i class="fas fa-download" aria-hidden="true"></i><span>All Data</span><i class="fas fa-file-excel file-icon" aria-hidden="true"></i>
+          </a>
+          <a href="#" id="downloadIssueMatrixBtn" class="btn btn-primary report-download-btn" style="display:none;" download>
+            <i class="fas fa-download" aria-hidden="true"></i><span>By Issue Type</span><i class="fas fa-file-excel file-icon" aria-hidden="true"></i>
+          </a>
         </div>
 
         <a href="/edit_obs" class="btn btn-warning position-relative" id="editBtn">
@@ -1399,6 +1415,7 @@ function pollReportsStatus(job_id) {
         document.getElementById('downloadCsvBtn').href = data.csv_url;
         document.getElementById('downloadIssueMatrixBtn').href = data.issue_matrix_url;
         document.getElementById('downloadPdfBtn').style.display = 'block';
+        document.getElementById('downloadCsvBtn').style.display = 'block';
         document.getElementById('downloadIssueMatrixBtn').style.display = data.issue_matrix_url ? 'block' : 'none';
       } else if (data.status === "failed") {
         document.getElementById('reportStatus').textContent = "Report generation failed: " + (data.error || "Unknown error");
@@ -1408,6 +1425,7 @@ function pollReportsStatus(job_id) {
           document.getElementById('downloadMessage').textContent = "PDF failed, but the spreadsheet is ready to download.";
           document.getElementById('downloadPdfBtn').style.display = 'none';
           document.getElementById('downloadCsvBtn').href = data.csv_url;
+          document.getElementById('downloadCsvBtn').style.display = 'block';
           if (data.issue_matrix_url) {
             document.getElementById('downloadIssueMatrixBtn').href = data.issue_matrix_url;
             document.getElementById('downloadIssueMatrixBtn').style.display = 'block';
@@ -1432,6 +1450,7 @@ function pollReportsStatus(job_id) {
           document.getElementById('downloadMessage').textContent = "Spreadsheet is ready. PDF is still processing.";
           document.getElementById('downloadPdfBtn').style.display = 'none';
           document.getElementById('downloadCsvBtn').href = data.csv_url;
+          document.getElementById('downloadCsvBtn').style.display = 'block';
           if (data.issue_matrix_url) {
             document.getElementById('downloadIssueMatrixBtn').href = data.issue_matrix_url;
             document.getElementById('downloadIssueMatrixBtn').style.display = 'block';
