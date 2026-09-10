@@ -567,6 +567,76 @@ def generate_csv_for_project(project, start_date=None, end_date=None, building=N
     
     return output_path
 
+def generate_issue_matrix_for_project(project, start_date=None, end_date=None, building=None, floor=None):
+    """Generate a compact Issue Matrix CSV using the existing report filters."""
+    import csv
+    from datetime import datetime
+
+    issue_types = [
+        'Non-defined', 'Water Damage', 'Furniture Changes',
+        'Mechanical Changes', 'TI/Core Changes', 'Out of Sequence', 'Other'
+    ]
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+    creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_FILE, scope)
+    client = gspread.authorize(creds)
+    sheet = client.open_by_key(SPREADSHEET_ID).sheet1
+    rows = sheet.get_all_records()
+
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d") if start_date else None
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59) if end_date else None
+    filtered_rows = []
+    for row in rows:
+        if row.get('Project', '') != project:
+            continue
+        if building and row.get(BUILDING_COLUMN, '') != building:
+            continue
+        if floor and str(row.get('Floor:', '')) != str(floor):
+            continue
+        if start_dt or end_dt:
+            timestamp = row.get('Timestamp', '')
+            row_dt = None
+            for timestamp_format in ("%m/%d/%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+                try:
+                    row_dt = datetime.strptime(timestamp, timestamp_format)
+                    break
+                except (TypeError, ValueError):
+                    continue
+            if row_dt is None or (start_dt and row_dt < start_dt) or (end_dt and row_dt > end_dt):
+                continue
+        filtered_rows.append(row)
+
+    if not filtered_rows:
+        scope_desc = project
+        if building:
+            scope_desc += f" / {building}"
+            if floor:
+                scope_desc += f" floor {floor}"
+        raise FileNotFoundError(f"No records found for project: {scope_desc} in the specified date range")
+
+    output_filename = f"report_{project.replace(' ', '_').replace('.', '')}{_building_slug(building, floor)}_issue_matrix.csv"
+    output_path = os.path.abspath(output_filename)
+    filter_text = (
+        f"Project: {project} | Date range: {start_date or 'All'} to {end_date or 'All'} | "
+        f"Building: {building or 'All'} | Floor: {floor or 'All'}"
+    )
+    counts = {issue_type: 0 for issue_type in issue_types}
+
+    with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['By Issue Category'] + [''] * len(issue_types))
+        writer.writerow(['Filters', filter_text] + [''] * (len(issue_types) - 1))
+        writer.writerow([])
+        writer.writerow(['OBS ID'] + issue_types)
+        for row in filtered_rows:
+            stored_type = str(row.get('Who is responsible?', '') or '').strip()
+            issue_type = stored_type if stored_type in issue_types[:-1] else ('Other' if stored_type else 'Non-defined')
+            counts[issue_type] += 1
+            writer.writerow([row.get('OBS ID#', '')] + [u'✓' if category == issue_type else '' for category in issue_types])
+        writer.writerow([])
+        writer.writerow(['Total count'] + [counts[issue_type] for issue_type in issue_types])
+
+    return output_path
+
 def generate_both_reports(project, start_date, end_date, building=None, floor=None):
     """Generate both PDF and CSV reports for a project with date range.
     building=None/'' includes all buildings; otherwise filters to that building.
@@ -614,13 +684,25 @@ def generate_both_reports(project, start_date, end_date, building=None, floor=No
         with open(debug_file, "a") as df:
             df.write(f"PDF generation FAILED: {type(e).__name__}: {e}\n")
         raise
+
+    issue_matrix_path = None
+    try:
+        issue_matrix_path = generate_issue_matrix_for_project(project, start_date, end_date, building, floor)
+        with open(debug_file, "a") as df:
+            df.write(f"Issue Matrix generated successfully: {issue_matrix_path}\n")
+    except Exception as e:
+        with open(debug_file, "a") as df:
+            df.write(f"Issue Matrix generation FAILED: {type(e).__name__}: {e}\n")
+        # The matrix is an additive report; preserve the existing PDF and CSV
+        # results if this optional artifact cannot be generated.
     
     with open(debug_file, "a") as df:
         df.write(f"=== GENERATE_BOTH_REPORTS COMPLETED ===\n")
     
     return {
         'pdf_path': pdf_path,
-        'csv_path': csv_path
+        'csv_path': csv_path,
+        'issue_matrix_path': issue_matrix_path
     }
 
 def get_report_record_count(project):

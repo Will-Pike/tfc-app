@@ -655,18 +655,22 @@ def reports_status(job_id):
         meta = job.meta or {}
 
     csv_path = meta.get('csv_path')
+    issue_matrix_path = meta.get('issue_matrix_path')
     csv_url = f"/download_csv_report/{job_id}" if csv_path else None
+    issue_matrix_url = f"/download_issue_matrix/{job_id}" if issue_matrix_path else None
 
     if job.is_finished:
         result = job.result
+        finished_matrix_url = f"/download_issue_matrix/{job_id}" if result.get('issue_matrix_path') else None
         return jsonify({
             "status": "finished",
             "pdf_url": f"/download_pdf_report/{job_id}",
-            "csv_url": f"/download_csv_report/{job_id}"
+            "csv_url": f"/download_csv_report/{job_id}",
+            "issue_matrix_url": finished_matrix_url
         })
     elif job.is_failed:
         error_message = str(job.exc_info) if job.exc_info else "Unknown error"
-        return jsonify({"status": "failed", "error": error_message, "csv_url": csv_url})
+        return jsonify({"status": "failed", "error": error_message, "csv_url": csv_url, "issue_matrix_url": issue_matrix_url})
     else:
         # Get progress information from job metadata
         total = meta.get('total', 0)
@@ -684,7 +688,8 @@ def reports_status(job_id):
             "processed": processed,
             "total": total,
             "phase": status,
-            "csv_url": csv_url
+            "csv_url": csv_url,
+            "issue_matrix_url": issue_matrix_url
         })
 
 @app.route('/download_pdf_report/<job_id>')
@@ -714,6 +719,22 @@ def download_csv_report(job_id):
     except Exception as e:
         print(f"Error downloading CSV: {e}")
         return "CSV report not found or not ready.", 404
+
+@app.route('/download_issue_matrix/<job_id>')
+def download_issue_matrix(job_id):
+    """Download the compact Issue Matrix CSV report."""
+    try:
+        job = Job.fetch(job_id, connection=redis_conn)
+        if job.is_finished and job.result:
+            matrix_path = job.result['issue_matrix_path']
+        else:
+            matrix_path = job.meta.get('issue_matrix_path')
+        if not matrix_path:
+            return "Issue Matrix report not found or not ready.", 404
+        return send_file(matrix_path, as_attachment=True, download_name=os.path.basename(matrix_path))
+    except Exception as e:
+        print(f"Error downloading Issue Matrix: {e}")
+        return "Issue Matrix report not found or not ready.", 404
 
 @app.route('/photo_proxy')
 def photo_proxy():

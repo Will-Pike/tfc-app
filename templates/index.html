@@ -108,6 +108,7 @@
           <div id="downloadMessage" class="alert alert-success" role="alert">Reports are ready for download!</div>
           <a href="#" id="downloadPdfBtn" class="btn btn-primary" style="display:block; width:100%; margin-bottom:15px;" download>Download PDF Report</a>
           <a href="#" id="downloadCsvBtn" class="btn btn-info" style="display:block; width:100%; margin-top:15px;" download>Download Spreadsheet Report</a>
+          <a href="#" id="downloadIssueMatrixBtn" class="btn btn-secondary" style="display:block; width:100%; margin-top:15px;" download>By Issue Category</a>
         </div>
 
         <a href="/edit_obs" class="btn btn-warning position-relative" id="editBtn">
@@ -1369,6 +1370,7 @@ function confirmDateRange() {
   if (new Date(startDate) > new Date(endDate)) { alert('Start date must be before end date'); return; }
   dateRangeModal.hide();
   document.getElementById('downloadSection').style.display = 'none';
+  document.getElementById('downloadIssueMatrixBtn').style.display = 'none';
   document.getElementById('reportStatus').textContent = "Generating reports...";
   document.getElementById('progressContainer').style.display = '';
   startFakeProgressBar(10);
@@ -1395,7 +1397,9 @@ function pollReportsStatus(job_id) {
         document.getElementById('downloadMessage').textContent = "Reports are ready for download!";
         document.getElementById('downloadPdfBtn').href = data.pdf_url;
         document.getElementById('downloadCsvBtn').href = data.csv_url;
+        document.getElementById('downloadIssueMatrixBtn').href = data.issue_matrix_url;
         document.getElementById('downloadPdfBtn').style.display = 'block';
+        document.getElementById('downloadIssueMatrixBtn').style.display = data.issue_matrix_url ? 'block' : 'none';
       } else if (data.status === "failed") {
         document.getElementById('reportStatus').textContent = "Report generation failed: " + (data.error || "Unknown error");
         document.getElementById('progressContainer').style.display = 'none';
@@ -1404,6 +1408,12 @@ function pollReportsStatus(job_id) {
           document.getElementById('downloadMessage').textContent = "PDF failed, but the spreadsheet is ready to download.";
           document.getElementById('downloadPdfBtn').style.display = 'none';
           document.getElementById('downloadCsvBtn').href = data.csv_url;
+          if (data.issue_matrix_url) {
+            document.getElementById('downloadIssueMatrixBtn').href = data.issue_matrix_url;
+            document.getElementById('downloadIssueMatrixBtn').style.display = 'block';
+          } else {
+            document.getElementById('downloadIssueMatrixBtn').style.display = 'none';
+          }
         }
       } else if (data.status === "in_progress") {
         if (data.progress !== undefined) {
@@ -1422,6 +1432,10 @@ function pollReportsStatus(job_id) {
           document.getElementById('downloadMessage').textContent = "Spreadsheet is ready. PDF is still processing.";
           document.getElementById('downloadPdfBtn').style.display = 'none';
           document.getElementById('downloadCsvBtn').href = data.csv_url;
+          if (data.issue_matrix_url) {
+            document.getElementById('downloadIssueMatrixBtn').href = data.issue_matrix_url;
+            document.getElementById('downloadIssueMatrixBtn').style.display = 'block';
+          }
         }
         setTimeout(() => pollReportsStatus(job_id), 1000);
       } else {
