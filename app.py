@@ -100,6 +100,14 @@ def progress_page():
         current_page='progress'
     )
 
+@app.route('/privacy-policy')
+def privacy_policy():
+    return render_template('privacy_policy.html')
+
+@app.route('/terms')
+def terms():
+    return render_template('terms.html')
+
 @app.route('/get_progress_entries')
 def get_progress_entries_route():
     project = request.args.get('project') or get_project()
