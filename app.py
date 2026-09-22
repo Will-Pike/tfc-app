@@ -430,7 +430,11 @@ def start_observation():
 
 @app.route('/start_native_observation', methods=['POST'])
 def start_native_observation():
-    """Reserve an OBS number and return the native observation form context."""
+    """Return the native observation form context for any OBS number.
+
+    Existing observations are returned with their saved details so the form can
+    edit them instead of requiring a replacement confirmation or reservation.
+    """
     data = request.get_json(silent=True) or {}
     project = data.get('project') or get_project()
     if not project or project not in get_projects():
@@ -438,20 +442,20 @@ def start_native_observation():
     seq = data.get('seq')
     building = data.get('building')
     floor = data.get('floor')
-    replace = bool(data.get('replace'))
     if not isinstance(seq, int) or seq < 1 or building not in get_buildings() or not floor:
         return jsonify({"error": "Invalid observation location"}), 400
     try:
-        from generate_pdf import get_project_context
+        from generate_pdf import get_obs_details, get_project_context
         obs_id = compose_obs_id(seq, building, floor)
         ctx = get_project_context(project)
-        if obs_id in ctx.get('obs_ids', set()):
-            if not replace:
-                return jsonify({"status": "exists", "obs_id": obs_id})
-            return jsonify({"status": "ok", "obs_id": obs_id, "user": ctx.get('user', '')})
-        if not _reserve_exact(project, seq):
-            return jsonify({"status": "taken", "obs_id": obs_id})
-        return jsonify({"status": "ok", "obs_id": obs_id, "user": ctx.get('user', '')})
+        details = get_obs_details(project, obs_id)
+        return jsonify({
+            "status": "ok",
+            "obs_id": obs_id,
+            "user": (details or {}).get('user', ctx.get('user', '')),
+            "existing": bool(details),
+            "details": details,
+        })
     except Exception as e:
         print(f"Error starting native observation: {e}")
         return jsonify({"error": "Failed to start observation"}), 500
@@ -471,13 +475,10 @@ def submit_native_observation():
     stakeholder = request.form.get('stakeholder', '').strip()
     price = request.form.get('price', '').strip()
     replace = request.form.get('replace') == 'true'
-    reservation_key = None
-    if obs_id:
-        reservation_key = f"obs:resv:{project}:{obs_id.rsplit('-', 1)[-1]}"
     if not project or project not in get_projects() or not obs_id or building not in get_buildings() or not floor or not room:
         return jsonify({"error": "Building, floor, and room are required."}), 400
     try:
-        from generate_pdf import append_obs_to_spreadsheet, delete_obs_rows, upload_native_photo_to_drive
+        from generate_pdf import append_obs_to_spreadsheet, update_obs_in_spreadsheet, upload_native_photo_to_drive
         photo_urls = []
         for file in request.files.getlist('photos'):
             if not file or not file.filename:
@@ -491,21 +492,23 @@ def submit_native_observation():
             if not url:
                 return jsonify({"error": "A photo could not be uploaded."}), 502
             photo_urls.append(url)
-        if replace:
-            delete_obs_rows(project, obs_id)
-        if not append_obs_to_spreadsheet(project, obs_id, {
+        observation_data = {
                 'building': building, 'floor': floor, 'room': room,
             'issue': issue, 'user': user,
             'location_within_room': location_within_room,
             'responsible': responsible, 'stakeholder': stakeholder,
-            'price': price}, photo_urls):
+            'price': price}
+        if replace:
+            if photo_urls:
+                observation_data['photo_urls'] = ', '.join(photo_urls)
+            saved = update_obs_in_spreadsheet(project, obs_id, observation_data)
+        else:
+            saved = append_obs_to_spreadsheet(project, obs_id, observation_data, photo_urls)
+        if not saved:
             return jsonify({"error": "Could not save the observation."}), 502
-        redis_conn.delete(f"obs:resv:{project}:{obs_id.rsplit('-', 1)[-1]}")
         return jsonify({"success": True, "obs_id": obs_id})
     except Exception as e:
         print(f"Error submitting native observation: {e}")
-        if reservation_key:
-            redis_conn.delete(reservation_key)
         return jsonify({"error": "Failed to save observation"}), 500
 
 @app.route('/reset_obs', methods=['POST'])

@@ -819,6 +819,7 @@ def get_obs_list_for_project(project):
                     "building": row.get(BUILDING_COLUMN, ""),
                     "floor": row.get("Floor:", ""),
                     "room": row.get("Room:", ""),
+                    "location_within_room": row.get("Location within Room", ""),
                     "issue": row.get("Issue:", ""),
                     "user": row.get("User:", ""),
                     "responsible": row.get("Who is responsible?", ""),
@@ -956,6 +957,8 @@ def update_obs_in_spreadsheet(project, obs_id, updated_data):
                     sheet.update_cell(row_index, column_map['Floor:'], updated_data['floor'])
                 if 'room' in updated_data and 'Room:' in column_map:
                     sheet.update_cell(row_index, column_map['Room:'], updated_data['room'])
+                if 'location_within_room' in updated_data and 'Location within Room' in column_map:
+                    sheet.update_cell(row_index, column_map['Location within Room'], updated_data['location_within_room'])
                 if 'issue' in updated_data and 'Issue:' in column_map:
                     sheet.update_cell(row_index, column_map['Issue:'], updated_data['issue'])
                 if 'price' in updated_data and PRICE_COLUMN in column_map:

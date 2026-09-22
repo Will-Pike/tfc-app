@@ -1045,19 +1045,7 @@ function startObservationReport(event) {
     .then(data => {
       if (!data.ok) throw new Error(data.data.error || 'Could not start observation.');
       data = data.data;
-      if (data.status === 'exists') {
-        if (window.confirm('This will replace existing observation ' + data.obs_id + '. Continue?')) {
-          startNativeReservation(building, floor, currentSeq, true);
-        } else {
-          bootstrap.Modal.getInstance(document.getElementById('observationModal')).hide();
-        }
-        return;
-      }
-      if (data.status === 'taken') {
-        alert('OBS ID ' + data.obs_id + ' is currently being used by someone else. Please pick a different number.');
-        return;
-      }
-      if (data.status === 'ok') showNativeObservation(data.obs_id, data.user || '', false);
+      if (data.status === 'ok') showNativeObservation(data.obs_id, data.user || '', data.existing, data.details);
       else alert(data.error || 'Could not start observation.');
     })
     .catch(err => showNativeError('Could not start observation: ' + err.message));
@@ -1098,7 +1086,7 @@ function showNativeError(message) {
   status.className = 'status alert alert-danger';
 }
 
-function showNativeObservation(obsId, user, replace) {
+function showNativeObservation(obsId, user, replace, details) {
   document.getElementById('nativeObservationLoading').style.display = 'none';
   document.getElementById('observationForm').style.display = '';
   document.getElementById('nativeObsId').textContent = obsId;
@@ -1117,6 +1105,23 @@ function showNativeObservation(obsId, user, replace) {
   document.getElementById('nativeIssue').value = '';
   document.getElementById('nativePhotos').value = '';
   document.getElementById('nativePhotoPreview').innerHTML = '';
+  if (details) {
+    document.getElementById('nativeRoom').value = details.room || '';
+    document.getElementById('nativeLocation').value = details.location_within_room || '';
+    document.getElementById('nativeIssue').value = details.issue || '';
+    document.getElementById('nativePrice').value = details.price || '';
+
+    const setNativeSelect = (selectId, otherId, value) => {
+      const select = document.getElementById(selectId);
+      const optionExists = [...select.options].some(option => option.value === value);
+      select.value = value && optionExists ? value : (value ? 'Other' : '');
+      document.getElementById(otherId).value = value && !optionExists ? value : '';
+      toggleNativeOther(selectId, otherId);
+    };
+    setNativeSelect('nativeUserSelect', 'nativeUserOther', details.user || '');
+    setNativeSelect('nativeResponsible', 'nativeResponsibleOther', details.responsible || '');
+    setNativeSelect('nativeStakeholder', 'nativeStakeholderOther', details.stakeholder || '');
+  }
   const nativeStatus = document.getElementById('nativeObservationStatus');
   nativeStatus.textContent = '';
   nativeStatus.className = 'status alert alert-info d-none';
