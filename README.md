@@ -1,5 +1,33 @@
 # TFC App
 
+## Invoice draft from Git history
+
+From the repository directory, generate grouped work items and a printable HTML invoice:
+
+```bash
+python invoice_generator.py --start 2026-06-22 --end 2026-09-09 --rate 100
+```
+
+Edit the `hours` values in `invoice_draft.json`, then regenerate only the invoice from that draft:
+
+```bash
+python invoice_generator.py --draft invoice_draft.json
+```
+
+For non-labor expenses such as AWS hosting, set `amount_override` on the line item. The amount is included in the invoice total without being treated as hours.
+
+The generator groups related commits, excludes likely fix-only/setup commits by default, and preserves those commits in an HTML review section.
+
+## Per-commit work log
+
+The July 2–September 14 work log follows the format of the reference PDF and includes every commit in that period:
+
+```bash
+python work_log_generator.py
+```
+
+Edit the `hours` values in `work_log_draft.json` and rerun the command to update the HTML and PDF.
+
 A project-specific fork of the [Schnurr App](https://github.com/Will-Pike/Schnurr-App)
 (`master` branch — the production codebase). Flask app for logging field
 observations from a Google Form / Sheet and generating PDF reports, tailored to

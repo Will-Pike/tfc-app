@@ -31,6 +31,11 @@ from googleapiclient.discovery import build
 import io
 from googleapiclient.http import MediaIoBaseUpload
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+# Server may run in UTC (e.g. on EC2), but observations are recorded in Central time.
+APP_TIMEZONE = ZoneInfo(os.getenv("APP_TIMEZONE", "America/Chicago"))
 
 SERVICE_FILE = os.getenv("SERVICE_FILE", "./service-account.json")
 # Response Sheet for the TFC form. Override via env so this fork points at the
@@ -999,7 +1004,7 @@ def append_obs_to_spreadsheet(project, obs_id, data, photo_urls=None):
         sheet = client.open_by_key(SPREADSHEET_ID).sheet1
         headers = sheet.row_values(1)
         values = {
-            'Timestamp': time.strftime('%m/%d/%Y %H:%M:%S'),
+            'Timestamp': datetime.now(APP_TIMEZONE).strftime('%m/%d/%Y %H:%M:%S'),
             'Project': project,
             'OBS ID#': obs_id,
             BUILDING_COLUMN: data.get('building', ''),
