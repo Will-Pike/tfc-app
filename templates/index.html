@@ -629,6 +629,7 @@ function loadProgressEntries() {
 
 function renderProgressSummary(summary) {
   const summaryEl = document.getElementById('progressSummary');
+  if (!summaryEl) return;
   if (!summary) { summaryEl.innerHTML = '<p class="text-muted">No progress reports yet.</p>'; return; }
   const counts = summary.counts || {};
   const rows = Object.keys(counts).map(status => {
@@ -655,6 +656,7 @@ function renderProgressSummary(summary) {
 
 function renderProgressList(entries) {
   const list = document.getElementById('progressList');
+  if (!list) return;
   if (!entries || entries.length === 0) {
     list.innerHTML = '<p class="text-muted">No progress reports yet. Create one to get started.</p>';
     return;
@@ -1446,7 +1448,11 @@ function pollReportsStatus(job_id) {
           }
         }
       } else if (data.status === "in_progress") {
-        if (data.progress !== undefined) {
+        if (data.phase === 'generating_csv') {
+          document.getElementById('reportStatus').textContent = "Preparing spreadsheet data...";
+        } else if (data.phase === 'generating_issue_matrix') {
+          document.getElementById('reportStatus').textContent = "Building issue matrix report...";
+        } else if (data.progress !== undefined) {
           clearInterval(progressInterval);
           progress = data.progress; updateProgressBar();
           if (data.phase === 'merging_pdfs') {

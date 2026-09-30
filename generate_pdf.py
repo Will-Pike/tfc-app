@@ -690,6 +690,12 @@ def generate_both_reports(project, start_date, end_date, building=None, floor=No
             df.write(f"CSV generation FAILED: {type(e).__name__}: {e}\n")
         raise
 
+    if job:
+        job.meta['csv_path'] = csv_path
+        job.meta['status'] = 'generating_issue_matrix'
+        job.meta['last_updated'] = time.time()
+        job.save_meta()
+
     issue_matrix_path = None
     try:
         issue_matrix_path = generate_issue_matrix_for_project(project, start_date, end_date, building, floor)
