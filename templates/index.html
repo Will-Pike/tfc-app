@@ -242,6 +242,21 @@
       </div>
       <div class="modal-body">
         <div class="mb-3">
+          <label class="form-label d-block">Reports to generate:</label>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="checkbox" id="reportTypePdf" checked>
+            <label class="form-check-label" for="reportTypePdf">PDF</label>
+          </div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="checkbox" id="reportTypeCsv" checked>
+            <label class="form-check-label" for="reportTypeCsv">All Data</label>
+          </div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="checkbox" id="reportTypeIssueMatrix" checked>
+            <label class="form-check-label" for="reportTypeIssueMatrix">By Issue Type</label>
+          </div>
+        </div>
+        <div class="mb-3">
           <label for="reportBuilding" class="form-label">Building:</label>
           <select id="reportBuilding" class="form-control" onchange="onReportBuildingChange()">
             <option value="">Both Buildings</option>
@@ -1378,6 +1393,9 @@ function onReportBuildingChange() {
 function showDateRangePicker() {
   if (!dateRangeModal) dateRangeModal = new bootstrap.Modal(document.getElementById('dateRangeModal'));
   populateReportBuildings();
+  document.getElementById('reportTypePdf').checked = true;
+  document.getElementById('reportTypeCsv').checked = true;
+  document.getElementById('reportTypeIssueMatrix').checked = true;
   const today = new Date();
   const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7);
   document.getElementById('endDate').value = today.toISOString().split('T')[0];
@@ -1396,17 +1414,24 @@ function confirmDateRange() {
   const endDate = document.getElementById('endDate').value;
   const building = document.getElementById('reportBuilding').value;
   const floor = document.getElementById('reportFloor').value;
+  const reportTypes = [];
+  if (document.getElementById('reportTypePdf').checked) reportTypes.push('pdf');
+  if (document.getElementById('reportTypeCsv').checked) reportTypes.push('csv');
+  if (document.getElementById('reportTypeIssueMatrix').checked) reportTypes.push('issue_matrix');
   if (!startDate || !endDate) { alert('Please select both start and end dates'); return; }
   if (new Date(startDate) > new Date(endDate)) { alert('Start date must be before end date'); return; }
+  if (reportTypes.length === 0) { alert('Please select at least one report to generate'); return; }
   dateRangeModal.hide();
   document.getElementById('downloadSection').style.display = 'none';
+  document.getElementById('downloadPdfBtn').style.display = 'none';
+  document.getElementById('downloadCsvBtn').style.display = 'none';
   document.getElementById('downloadIssueMatrixBtn').style.display = 'none';
   document.getElementById('reportStatus').textContent = "Generating reports...";
   document.getElementById('progressContainer').style.display = '';
   startFakeProgressBar(10);
   fetch('/generate_reports', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ project: PROJECT, start_date: startDate, end_date: endDate, building: building, floor: floor })
+    body: JSON.stringify({ project: PROJECT, start_date: startDate, end_date: endDate, building: building, floor: floor, report_types: reportTypes })
   })
   .then(res => res.json())
   .then(data => {
@@ -1415,44 +1440,52 @@ function confirmDateRange() {
   })
   .catch(err => { document.getElementById('reportStatus').textContent = "Error: " + err.message; document.getElementById('progressContainer').style.display = 'none'; });
 }
+const REPORT_TYPE_BUTTONS = { pdf: 'downloadPdfBtn', csv: 'downloadCsvBtn', issue_matrix: 'downloadIssueMatrixBtn' };
+function showDownloadButton(type, url) {
+  if (!url) return;
+  const btn = document.getElementById(REPORT_TYPE_BUTTONS[type]);
+  btn.href = url;
+  btn.style.display = 'block';
+}
 function pollReportsStatus(job_id) {
   fetch(`/reports_status/${job_id}`)
     .then(res => res.json())
     .then(data => {
+      const requested = data.report_types || ['pdf', 'csv', 'issue_matrix'];
+      if (data.status === "queued") {
+        clearInterval(progressInterval);
+        document.getElementById('progressContainer').style.display = 'none';
+        document.getElementById('reportStatus').textContent = data.queue_position
+          ? `Queued behind ${data.queue_position} other report${data.queue_position === 1 ? '' : 's'}...`
+          : "Queued, waiting to start...";
+        setTimeout(() => pollReportsStatus(job_id), 1500);
+        return;
+      }
       if (data.status === "finished") {
         finishProgressBar();
         document.getElementById('reportStatus').textContent = "";
         document.getElementById('progressContainer').style.display = 'none';
         document.getElementById('downloadSection').style.display = 'block';
-        document.getElementById('downloadMessage').textContent = "Reports are ready for download!";
-        document.getElementById('downloadPdfBtn').href = data.pdf_url;
-        document.getElementById('downloadCsvBtn').href = data.csv_url;
-        document.getElementById('downloadIssueMatrixBtn').href = data.issue_matrix_url;
-        document.getElementById('downloadPdfBtn').style.display = 'block';
-        document.getElementById('downloadCsvBtn').style.display = 'block';
-        document.getElementById('downloadIssueMatrixBtn').style.display = data.issue_matrix_url ? 'block' : 'none';
+        document.getElementById('downloadMessage').textContent = requested.length > 1 ? "Reports are ready for download!" : "Report is ready for download!";
+        requested.forEach(type => showDownloadButton(type, data[type + '_url']));
       } else if (data.status === "failed") {
-        document.getElementById('reportStatus').textContent = "Report generation failed: " + (data.error || "Unknown error");
         document.getElementById('progressContainer').style.display = 'none';
-        if (data.csv_url) {
+        const otherReady = (requested.includes('csv') && data.csv_url) || (requested.includes('issue_matrix') && data.issue_matrix_url);
+        document.getElementById('reportStatus').textContent = (requested.includes('pdf') && otherReady)
+          ? "PDF generation failed, but the other selected report(s) are ready."
+          : "Report generation failed: " + (data.error || "Unknown error");
+        if (otherReady) {
           document.getElementById('downloadSection').style.display = 'block';
-          document.getElementById('downloadMessage').textContent = "PDF failed, but the spreadsheet is ready to download.";
-          document.getElementById('downloadPdfBtn').style.display = 'none';
-          document.getElementById('downloadCsvBtn').href = data.csv_url;
-          document.getElementById('downloadCsvBtn').style.display = 'block';
-          if (data.issue_matrix_url) {
-            document.getElementById('downloadIssueMatrixBtn').href = data.issue_matrix_url;
-            document.getElementById('downloadIssueMatrixBtn').style.display = 'block';
-          } else {
-            document.getElementById('downloadIssueMatrixBtn').style.display = 'none';
-          }
+          document.getElementById('downloadMessage').textContent = "Selected spreadsheet report(s) are ready to download.";
+          if (requested.includes('csv')) showDownloadButton('csv', data.csv_url);
+          if (requested.includes('issue_matrix')) showDownloadButton('issue_matrix', data.issue_matrix_url);
         }
       } else if (data.status === "in_progress") {
         if (data.phase === 'generating_csv') {
           document.getElementById('reportStatus').textContent = "Preparing spreadsheet data...";
         } else if (data.phase === 'generating_issue_matrix') {
           document.getElementById('reportStatus').textContent = "Building issue matrix report...";
-        } else if (data.progress !== undefined) {
+        } else if (data.progress !== undefined && data.phase !== 'starting') {
           clearInterval(progressInterval);
           progress = data.progress; updateProgressBar();
           if (data.phase === 'merging_pdfs') {
@@ -1463,16 +1496,15 @@ function pollReportsStatus(job_id) {
         } else {
           document.getElementById('reportStatus').textContent = "Processing reports...";
         }
-        if (data.csv_url) {
+        const csvReady = requested.includes('csv') && data.csv_url;
+        const matrixReady = requested.includes('issue_matrix') && data.issue_matrix_url;
+        if (csvReady || matrixReady) {
           document.getElementById('downloadSection').style.display = 'block';
-          document.getElementById('downloadMessage').textContent = "Spreadsheet is ready. PDF is still processing.";
-          document.getElementById('downloadPdfBtn').style.display = 'none';
-          document.getElementById('downloadCsvBtn').href = data.csv_url;
-          document.getElementById('downloadCsvBtn').style.display = 'block';
-          if (data.issue_matrix_url) {
-            document.getElementById('downloadIssueMatrixBtn').href = data.issue_matrix_url;
-            document.getElementById('downloadIssueMatrixBtn').style.display = 'block';
-          }
+          document.getElementById('downloadMessage').textContent = requested.includes('pdf')
+            ? "Selected spreadsheet report(s) are ready. PDF is still processing."
+            : "Spreadsheet report(s) are ready for download.";
+          if (csvReady) showDownloadButton('csv', data.csv_url);
+          if (matrixReady) showDownloadButton('issue_matrix', data.issue_matrix_url);
         }
         setTimeout(() => pollReportsStatus(job_id), 1000);
       } else {

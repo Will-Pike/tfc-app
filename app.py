@@ -609,9 +609,11 @@ def download_report(job_id):
     except Exception:
         return "Report not found or not ready.", 404
 
+VALID_REPORT_TYPES = {'pdf', 'csv', 'issue_matrix'}
+
 @app.route('/generate_reports', methods=['POST'])
 def generate_reports():
-    """Generate both PDF and CSV reports for a project with date range"""
+    """Generate the selected reports (PDF and/or spreadsheets) for a project with date range"""
     data = request.json
     project = data.get('project')
     start_date = data.get('start_date')
@@ -622,6 +624,11 @@ def generate_reports():
     floor = data.get('floor') or None
     if not building:
         floor = None  # floor filter is meaningless without a building
+
+    report_types = data.get('report_types')
+    if report_types is None:
+        report_types = list(VALID_REPORT_TYPES)
+    report_types = [t for t in report_types if t in VALID_REPORT_TYPES]
 
     if not project or project not in get_projects():
         return jsonify({"error": "Invalid or missing project"}), 400
@@ -636,14 +643,17 @@ def generate_reports():
                 return jsonify({"error": "Invalid floor for selected building"}), 400
         except (ValueError, TypeError):
             return jsonify({"error": "Invalid floor value"}), 400
+    if not report_types:
+        return jsonify({"error": "At least one report type must be selected"}), 400
 
     try:
         job_id = str(uuid.uuid4())
         job = task_queue.enqueue_call(
             func='generate_pdf.generate_both_reports',
-            args=(project, start_date, end_date, building, floor),
+            args=(project, start_date, end_date, building, floor, report_types),
             job_id=job_id,
-            timeout=REPORT_JOB_TIMEOUT
+            timeout=REPORT_JOB_TIMEOUT,
+            meta={'report_types': report_types}
         )
         return jsonify({"job_id": job_id}), 202
     except Exception as e:
@@ -652,18 +662,35 @@ def generate_reports():
 
 @app.route('/reports_status/<job_id>')
 def reports_status(job_id):
-    """Check status of both PDF and CSV report generation"""
+    """Check status of the selected report generation job."""
     try:
         job = Job.fetch(job_id, connection=redis_conn)
     except Exception:
         return jsonify({"status": "not_found"}), 404
 
-    # Refresh job/meta to avoid stale progress in Redis
     try:
         job.refresh()
+    except Exception:
+        pass
+
+    meta = job.meta or {}
+    report_types = meta.get('report_types', list(VALID_REPORT_TYPES))
+
+    # Job hasn't started yet (still behind other jobs on the single worker) -
+    # report its place in line instead of a misleading 0/0 progress state.
+    if job.get_status(refresh=False) == 'queued':
+        position = task_queue.get_job_position(job_id)
+        return jsonify({
+            "status": "queued",
+            "queue_position": (position + 1) if position is not None else None,
+            "report_types": report_types
+        })
+
+    # Refresh meta to avoid stale progress in Redis
+    try:
         meta = job.get_meta(refresh=True)
     except Exception:
-        meta = job.meta or {}
+        pass
 
     csv_path = meta.get('csv_path')
     issue_matrix_path = meta.get('issue_matrix_path')
@@ -671,17 +698,20 @@ def reports_status(job_id):
     issue_matrix_url = f"/download_issue_matrix/{job_id}" if issue_matrix_path else None
 
     if job.is_finished:
-        result = job.result
+        result = job.result or {}
+        finished_pdf_url = f"/download_pdf_report/{job_id}" if result.get('pdf_path') else None
+        finished_csv_url = f"/download_csv_report/{job_id}" if result.get('csv_path') else None
         finished_matrix_url = f"/download_issue_matrix/{job_id}" if result.get('issue_matrix_path') else None
         return jsonify({
             "status": "finished",
-            "pdf_url": f"/download_pdf_report/{job_id}",
-            "csv_url": f"/download_csv_report/{job_id}",
-            "issue_matrix_url": finished_matrix_url
+            "pdf_url": finished_pdf_url,
+            "csv_url": finished_csv_url,
+            "issue_matrix_url": finished_matrix_url,
+            "report_types": report_types
         })
     elif job.is_failed:
         error_message = str(job.exc_info) if job.exc_info else "Unknown error"
-        return jsonify({"status": "failed", "error": error_message, "csv_url": csv_url, "issue_matrix_url": issue_matrix_url})
+        return jsonify({"status": "failed", "error": error_message, "csv_url": csv_url, "issue_matrix_url": issue_matrix_url, "report_types": report_types})
     else:
         # Get progress information from job metadata
         total = meta.get('total', 0)
@@ -700,7 +730,8 @@ def reports_status(job_id):
             "total": total,
             "phase": status,
             "csv_url": csv_url,
-            "issue_matrix_url": issue_matrix_url
+            "issue_matrix_url": issue_matrix_url,
+            "report_types": report_types
         })
 
 @app.route('/download_pdf_report/<job_id>')

@@ -659,71 +659,89 @@ def generate_issue_matrix_for_project(project, start_date=None, end_date=None, b
 
     return output_path
 
-def generate_both_reports(project, start_date, end_date, building=None, floor=None):
-    """Generate both PDF and CSV reports for a project with date range.
+def generate_both_reports(project, start_date, end_date, building=None, floor=None, report_types=None):
+    """Generate the selected reports (PDF and/or spreadsheets) for a project with date range.
     building=None/'' includes all buildings; otherwise filters to that building.
-    floor=None/'' includes all floors; otherwise filters to that floor within the building."""
+    floor=None/'' includes all floors; otherwise filters to that floor within the building.
+    report_types is an iterable subset of {'pdf', 'csv', 'issue_matrix'}; defaults to all three."""
     debug_file = "/tmp/schnurr_debug.log"
+
+    if report_types is None:
+        report_types = ['pdf', 'csv', 'issue_matrix']
+    report_types = set(report_types)
 
     with open(debug_file, "a") as df:
         df.write(f"\n=== GENERATE_BOTH_REPORTS CALLED ===\n")
-        df.write(f"Project: {project}, Start: {start_date}, End: {end_date}, Building: {building or 'ALL'}, Floor: {floor or 'ALL'}\n")
+        df.write(f"Project: {project}, Start: {start_date}, End: {end_date}, Building: {building or 'ALL'}, Floor: {floor or 'ALL'}, Types: {sorted(report_types)}\n")
     
     job = get_current_job() if get_current_job else None
 
     if job:
         # Initialize metadata with placeholders so UI doesn't show 0/0
-        job.meta['status'] = 'generating_csv'
+        job.meta['report_types'] = list(report_types)
+        job.meta['status'] = 'starting'
         job.meta['total'] = 1  # Placeholder, will be updated during PDF generation
         job.meta['processed'] = 0
         job.meta['last_updated'] = time.time()
         job.save_meta()
         with open(debug_file, "a") as df:
-            df.write(f"Job metadata initialized: status=generating_csv, total=1, processed=0\n")
+            df.write(f"Job metadata initialized: status=starting, total=1, processed=0\n")
 
-    try:
-        csv_path = generate_csv_for_project(project, start_date, end_date, building, floor)
-        with open(debug_file, "a") as df:
-            df.write(f"CSV generated successfully: {csv_path}\n")
-    except Exception as e:
-        with open(debug_file, "a") as df:
-            df.write(f"CSV generation FAILED: {type(e).__name__}: {e}\n")
-        raise
-
-    if job:
-        job.meta['csv_path'] = csv_path
-        job.meta['status'] = 'generating_issue_matrix'
-        job.meta['last_updated'] = time.time()
-        job.save_meta()
+    csv_path = None
+    if 'csv' in report_types:
+        if job:
+            job.meta['status'] = 'generating_csv'
+            job.meta['last_updated'] = time.time()
+            job.save_meta()
+        try:
+            csv_path = generate_csv_for_project(project, start_date, end_date, building, floor)
+            with open(debug_file, "a") as df:
+                df.write(f"CSV generated successfully: {csv_path}\n")
+        except Exception as e:
+            with open(debug_file, "a") as df:
+                df.write(f"CSV generation FAILED: {type(e).__name__}: {e}\n")
+            raise
+        if job:
+            job.meta['csv_path'] = csv_path
+            job.meta['last_updated'] = time.time()
+            job.save_meta()
 
     issue_matrix_path = None
-    try:
-        issue_matrix_path = generate_issue_matrix_for_project(project, start_date, end_date, building, floor)
-        with open(debug_file, "a") as df:
-            df.write(f"Issue Matrix generated successfully: {issue_matrix_path}\n")
-    except Exception as e:
-        with open(debug_file, "a") as df:
-            df.write(f"Issue Matrix generation FAILED: {type(e).__name__}: {e}\n")
-        # The matrix is an additive report; preserve the existing PDF and CSV
-        # results if this optional artifact cannot be generated.
+    if 'issue_matrix' in report_types:
+        if job:
+            job.meta['status'] = 'generating_issue_matrix'
+            job.meta['last_updated'] = time.time()
+            job.save_meta()
+        try:
+            issue_matrix_path = generate_issue_matrix_for_project(project, start_date, end_date, building, floor)
+            with open(debug_file, "a") as df:
+                df.write(f"Issue Matrix generated successfully: {issue_matrix_path}\n")
+        except Exception as e:
+            with open(debug_file, "a") as df:
+                df.write(f"Issue Matrix generation FAILED: {type(e).__name__}: {e}\n")
+            # The matrix is an additive report; preserve the existing PDF and CSV
+            # results if this optional artifact cannot be generated.
+        if job:
+            job.meta['issue_matrix_path'] = issue_matrix_path
+            job.meta['last_updated'] = time.time()
+            job.save_meta()
 
-    if job:
-        job.meta['csv_path'] = csv_path
-        job.meta['issue_matrix_path'] = issue_matrix_path
-        job.meta['status'] = 'generating_pdfs'
-        job.meta['last_updated'] = time.time()
-        job.save_meta()
-        with open(debug_file, "a") as df:
-            df.write(f"Job metadata set: status=generating_pdfs\n")
-
-    try:
-        pdf_path = generate_report_for_project(project, start_date, end_date, building, floor)
-        with open(debug_file, "a") as df:
-            df.write(f"PDF generated successfully: {pdf_path}\n")
-    except Exception as e:
-        with open(debug_file, "a") as df:
-            df.write(f"PDF generation FAILED: {type(e).__name__}: {e}\n")
-        raise
+    pdf_path = None
+    if 'pdf' in report_types:
+        if job:
+            job.meta['status'] = 'generating_pdfs'
+            job.meta['last_updated'] = time.time()
+            job.save_meta()
+            with open(debug_file, "a") as df:
+                df.write(f"Job metadata set: status=generating_pdfs\n")
+        try:
+            pdf_path = generate_report_for_project(project, start_date, end_date, building, floor)
+            with open(debug_file, "a") as df:
+                df.write(f"PDF generated successfully: {pdf_path}\n")
+        except Exception as e:
+            with open(debug_file, "a") as df:
+                df.write(f"PDF generation FAILED: {type(e).__name__}: {e}\n")
+            raise
 
     with open(debug_file, "a") as df:
         df.write(f"=== GENERATE_BOTH_REPORTS COMPLETED ===\n")
