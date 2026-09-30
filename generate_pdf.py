@@ -625,20 +625,37 @@ def generate_issue_matrix_for_project(project, start_date=None, end_date=None, b
         f"Building: {building or 'All'} | Floor: {floor or 'All'}"
     )
     counts = {issue_type: 0 for issue_type in issue_types}
+    cost_by_issue_type = {issue_type: 0.0 for issue_type in issue_types}
+    total_cost = 0.0
+
+    def _parse_price(value):
+        cleaned = str(value or '').replace('$', '').replace(',', '').strip()
+        try:
+            return float(cleaned)
+        except ValueError:
+            return 0.0
 
     with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(['By Issue Category'] + [''] * len(issue_types))
-        writer.writerow(['Filters', filter_text] + [''] * (len(issue_types) - 1))
+        writer.writerow(['By Issue Category'] + [''] * (len(issue_types) + 4))
+        writer.writerow(['Filters', filter_text] + [''] * (len(issue_types) + 3))
         writer.writerow([])
-        writer.writerow(['OBS ID'] + issue_types)
+        writer.writerow(['OBS ID', 'Floor', 'Room'] + issue_types + ['Caused by', 'Price Estimate'])
         for row in filtered_rows:
             stored_type = str(row.get('Who is responsible?', '') or '').strip()
             issue_type = stored_type if stored_type in issue_types[:-1] else ('Other' if stored_type else 'Non-defined')
             counts[issue_type] += 1
-            writer.writerow([row.get('OBS ID#', '')] + [u'✓' if category == issue_type else '' for category in issue_types])
+            price = _parse_price(row.get(PRICE_COLUMN, ''))
+            cost_by_issue_type[issue_type] += price
+            total_cost += price
+            writer.writerow(
+                [row.get('OBS ID#', ''), row.get('Floor:', ''), row.get('Room:', '')]
+                + [u'✓' if category == issue_type else '' for category in issue_types]
+                + [stored_type, row.get(PRICE_COLUMN, '')]
+            )
         writer.writerow([])
-        writer.writerow(['Total count'] + [counts[issue_type] for issue_type in issue_types])
+        writer.writerow(['Total count', '', ''] + [counts[issue_type] for issue_type in issue_types] + ['', total_cost])
+        writer.writerow(['Total Cost', '', ''] + [cost_by_issue_type[issue_type] for issue_type in issue_types] + ['', total_cost])
 
     return output_path
 
@@ -673,8 +690,20 @@ def generate_both_reports(project, start_date, end_date, building=None, floor=No
             df.write(f"CSV generation FAILED: {type(e).__name__}: {e}\n")
         raise
 
+    issue_matrix_path = None
+    try:
+        issue_matrix_path = generate_issue_matrix_for_project(project, start_date, end_date, building, floor)
+        with open(debug_file, "a") as df:
+            df.write(f"Issue Matrix generated successfully: {issue_matrix_path}\n")
+    except Exception as e:
+        with open(debug_file, "a") as df:
+            df.write(f"Issue Matrix generation FAILED: {type(e).__name__}: {e}\n")
+        # The matrix is an additive report; preserve the existing PDF and CSV
+        # results if this optional artifact cannot be generated.
+
     if job:
         job.meta['csv_path'] = csv_path
+        job.meta['issue_matrix_path'] = issue_matrix_path
         job.meta['status'] = 'generating_pdfs'
         job.meta['last_updated'] = time.time()
         job.save_meta()
@@ -690,17 +719,6 @@ def generate_both_reports(project, start_date, end_date, building=None, floor=No
             df.write(f"PDF generation FAILED: {type(e).__name__}: {e}\n")
         raise
 
-    issue_matrix_path = None
-    try:
-        issue_matrix_path = generate_issue_matrix_for_project(project, start_date, end_date, building, floor)
-        with open(debug_file, "a") as df:
-            df.write(f"Issue Matrix generated successfully: {issue_matrix_path}\n")
-    except Exception as e:
-        with open(debug_file, "a") as df:
-            df.write(f"Issue Matrix generation FAILED: {type(e).__name__}: {e}\n")
-        # The matrix is an additive report; preserve the existing PDF and CSV
-        # results if this optional artifact cannot be generated.
-    
     with open(debug_file, "a") as df:
         df.write(f"=== GENERATE_BOTH_REPORTS COMPLETED ===\n")
     
