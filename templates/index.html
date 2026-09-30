@@ -1447,11 +1447,19 @@ function showDownloadButton(type, url) {
   btn.href = url;
   btn.style.display = 'block';
 }
+function hideUnrequestedDownloadButtons(requested) {
+  Object.keys(REPORT_TYPE_BUTTONS).forEach(type => {
+    if (!requested.includes(type)) {
+      document.getElementById(REPORT_TYPE_BUTTONS[type]).style.display = 'none';
+    }
+  });
+}
 function pollReportsStatus(job_id) {
   fetch(`/reports_status/${job_id}`)
     .then(res => res.json())
     .then(data => {
       const requested = data.report_types || ['pdf', 'csv', 'issue_matrix'];
+      hideUnrequestedDownloadButtons(requested);
       if (data.status === "queued") {
         clearInterval(progressInterval);
         document.getElementById('progressContainer').style.display = 'none';
