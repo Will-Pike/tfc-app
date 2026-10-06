@@ -626,36 +626,43 @@ def generate_issue_matrix_for_project(project, start_date=None, end_date=None, b
     )
     counts = {issue_type: 0 for issue_type in issue_types}
     cost_by_issue_type = {issue_type: 0.0 for issue_type in issue_types}
-    total_cost = 0.0
 
     def _parse_price(value):
         cleaned = str(value or '').replace('$', '').replace(',', '').strip()
+        if not cleaned:
+            return None
         try:
             return float(cleaned)
         except ValueError:
-            return 0.0
+            return None
 
     with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(['By Issue Category'] + [''] * (len(issue_types) + 4))
-        writer.writerow(['Filters', filter_text] + [''] * (len(issue_types) + 3))
+        writer.writerow(['By Issue Category'] + [''] * (len(issue_types) + 3))
+        writer.writerow(['Filters', filter_text] + [''] * (len(issue_types) + 2))
         writer.writerow([])
-        writer.writerow(['OBS ID', 'Floor', 'Room'] + issue_types + ['Caused by', 'Price Estimate'])
+        writer.writerow(['OBS ID', 'Floor', 'Room'] + issue_types + ['Caused by'])
         for row in filtered_rows:
             stored_type = str(row.get('Who is responsible?', '') or '').strip()
             issue_type = stored_type if stored_type in issue_types[:-1] else ('Other' if stored_type else 'Non-defined')
             counts[issue_type] += 1
-            price = _parse_price(row.get(PRICE_COLUMN, ''))
-            cost_by_issue_type[issue_type] += price
-            total_cost += price
+            price_value = row.get(PRICE_COLUMN, '')
+            has_price = str(price_value or '').strip() != ''
+            price = _parse_price(price_value)
+            if price is not None:
+                cost_by_issue_type[issue_type] += price
+            issue_cells = [
+                (price_value if has_price else u'✓') if category == issue_type else ''
+                for category in issue_types
+            ]
             writer.writerow(
                 [row.get('OBS ID#', ''), row.get('Floor:', ''), row.get('Room:', '')]
-                + [u'✓' if category == issue_type else '' for category in issue_types]
-                + [stored_type, row.get(PRICE_COLUMN, '')]
+                + issue_cells
+                + [stored_type]
             )
         writer.writerow([])
-        writer.writerow(['Total count', '', ''] + [counts[issue_type] for issue_type in issue_types] + ['', total_cost])
-        writer.writerow(['Total Cost', '', ''] + [cost_by_issue_type[issue_type] for issue_type in issue_types] + ['', total_cost])
+        writer.writerow(['Total count', '', ''] + [counts[issue_type] for issue_type in issue_types] + [''])
+        writer.writerow(['Total Cost', '', ''] + [cost_by_issue_type[issue_type] for issue_type in issue_types] + [''])
 
     return output_path
 
