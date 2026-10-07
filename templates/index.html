@@ -19,7 +19,7 @@
     .pdf-button { margin-top: 1vh; width: 100%; }
     .report-download-btn {
       align-items: center;
-      display: flex !important;
+      display: flex;
       gap: .7rem;
       justify-content: flex-start;
       margin-top: 15px;
@@ -1445,7 +1445,7 @@ function showDownloadButton(type, url) {
   if (!url) return;
   const btn = document.getElementById(REPORT_TYPE_BUTTONS[type]);
   btn.href = url;
-  btn.style.display = 'block';
+  btn.style.display = 'flex';
 }
 function hideUnrequestedDownloadButtons(requested) {
   Object.keys(REPORT_TYPE_BUTTONS).forEach(type => {
