@@ -445,10 +445,14 @@ def start_native_observation():
     if not isinstance(seq, int) or seq < 1 or building not in get_buildings() or not floor:
         return jsonify({"error": "Invalid observation location"}), 400
     try:
-        from generate_pdf import get_obs_details, get_project_context
+        from generate_pdf import get_obs_details, get_project_context, load_rows
+        t0 = time.perf_counter()
         obs_id = compose_obs_id(seq, building, floor)
-        ctx = get_project_context(project)
-        details = get_obs_details(project, obs_id)
+        rows = load_rows()
+        ctx = get_project_context(project, rows=rows)
+        # Only look up details when the ID is already in the sheet.
+        details = get_obs_details(project, obs_id, rows=rows) if obs_id in ctx["obs_ids"] else None
+        print(f"[timing] start_native_observation total: {time.perf_counter() - t0:.2f}s")
         return jsonify({
             "status": "ok",
             "obs_id": obs_id,

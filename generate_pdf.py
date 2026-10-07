@@ -48,6 +48,33 @@ SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1x5fYPiP5ZQT62WNswsIpmafutovqmtCmK
 BUILDING_COLUMN = os.getenv("BUILDING_COLUMN", "Building")
 PRICE_COLUMN = os.getenv("PRICE_COLUMN", "Price Estimate")
 
+_SHEETS_SCOPE = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+_sheet_cache = None
+_sheet_lock = threading.Lock()
+
+def _get_sheet(force_new=False):
+    """Authorized sheet1 handle, built once per process (auth + open_by_key are slow)."""
+    global _sheet_cache
+    with _sheet_lock:
+        if _sheet_cache is None or force_new:
+            t0 = time.perf_counter()
+            creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_FILE, _SHEETS_SCOPE)
+            client = gspread.authorize(creds)
+            _sheet_cache = client.open_by_key(SPREADSHEET_ID).sheet1
+            print(f"[timing] sheets auth+open: {time.perf_counter() - t0:.2f}s")
+        return _sheet_cache
+
+def load_rows():
+    """Full sheet as records via the cached handle; rebuilds the handle once on failure."""
+    t0 = time.perf_counter()
+    try:
+        rows = _get_sheet().get_all_records()
+    except Exception as e:
+        print(f"[timing] sheet read failed ({e}); rebuilding client")
+        rows = _get_sheet(force_new=True).get_all_records()
+    print(f"[timing] sheets get_all_records: {time.perf_counter() - t0:.2f}s ({len(rows)} rows)")
+    return rows
+
 # Debug mode - set to False in production to avoid filling disk
 DEBUG_HTML = os.getenv('DEBUG_HTML', 'False').lower() == 'true'
 
@@ -818,17 +845,14 @@ def get_highest_obs_for_project(project):
         print(f"Error getting highest OBS for project {project}: {e}")
         return 0
 
-def get_project_context(project):
+def get_project_context(project, rows=None):
     """Single sheet read -> next sequence number plus the most-recent row's
     building/floor/user, used to default the home-page dropdowns and prefill the
-    submitter on the form."""
+    submitter on the form. Pass `rows` to reuse an already-loaded sheet."""
     ctx = {"next_seq": 1, "building": "", "floor": "", "user": "", "obs_ids": set()}
     try:
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_FILE, scope)
-        client = gspread.authorize(creds)
-        sheet = client.open_by_key(SPREADSHEET_ID).sheet1
-        rows = sheet.get_all_records()
+        if rows is None:
+            rows = load_rows()
 
         proj_rows = [r for r in rows if r.get("Project", "") == project]
 
@@ -897,14 +921,11 @@ def get_obs_list_for_project(project):
         print(f"Error getting OBS list: {e}")
         return []
 
-def get_obs_details(project, obs_id):
-    """Get detailed information for a specific OBS entry"""
+def get_obs_details(project, obs_id, rows=None):
+    """Get detailed information for a specific OBS entry. Pass `rows` to reuse an already-loaded sheet."""
     try:
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_FILE, scope)
-        client = gspread.authorize(creds)
-        sheet = client.open_by_key(SPREADSHEET_ID).sheet1
-        rows = sheet.get_all_records()
+        if rows is None:
+            rows = load_rows()
         
         for idx, row in enumerate(rows):
             if row.get("Project", "") == project and str(row.get("OBS ID#", "")) == str(obs_id):
