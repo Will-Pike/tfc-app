@@ -334,7 +334,7 @@ def generate_report_for_project(project, start_date=None, end_date=None, buildin
         for idx, row in enumerate(matching_rows):
             issue_type = row.get("Issue:", "")
             # Price is now entered directly on the form (blank allowed); no index lookup.
-            cost = row.get(PRICE_COLUMN, "")
+            cost = str(row.get(PRICE_COLUMN, "")).strip()
 
             record = {
                 "project": row.get("Project", ""),
@@ -655,7 +655,7 @@ def generate_issue_matrix_for_project(project, start_date=None, end_date=None, b
     cost_by_issue_type = {issue_type: 0.0 for issue_type in issue_types}
 
     def _parse_price(value):
-        cleaned = str(value or '').replace('$', '').replace(',', '').strip()
+        cleaned = str(value).replace('$', '').replace(',', '').strip()
         if not cleaned:
             return None
         try:
@@ -674,7 +674,7 @@ def generate_issue_matrix_for_project(project, start_date=None, end_date=None, b
             issue_type = stored_type if stored_type in issue_types[:-1] else ('Other' if stored_type else 'Non-defined')
             counts[issue_type] += 1
             price_value = row.get(PRICE_COLUMN, '')
-            has_price = str(price_value or '').strip() != ''
+            has_price = str(price_value).strip() != ''
             price = _parse_price(price_value)
             if price is not None:
                 cost_by_issue_type[issue_type] += price
@@ -889,7 +889,7 @@ def get_obs_list_for_project(project):
         obs_list = []
         for idx, row in enumerate(rows):
             if row.get("Project", "") == project:
-                price = str(row.get(PRICE_COLUMN, "") or "").strip()
+                price = str(row.get(PRICE_COLUMN, "")).strip()
                 obs_list.append({
                     "row_index": idx + 2,  # +2 because sheets are 1-indexed and we skip header
                     "obs_id": row.get("OBS ID#", ""),
@@ -954,7 +954,7 @@ def get_obs_details(project, obs_id, rows=None):
                     "issue": row.get("Issue:", ""),
                     "responsible": row.get("Who is responsible?", ""),
                     "stakeholder": row.get("Stakeholder", ""),
-                    "price": row.get(PRICE_COLUMN, ""),
+                    "price": str(row.get(PRICE_COLUMN, "")).strip(),
                     "photo_url": photo_url
                 }
 
