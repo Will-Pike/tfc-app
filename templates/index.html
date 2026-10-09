@@ -323,15 +323,6 @@
               <input type="text" id="nativeUserOther" class="form-control mt-2" placeholder="Enter user name" style="display:none;">
             </div>
             <div class="col-md-6">
-              <label for="nativeLocation" class="form-label">Location within Room</label>
-              <select id="nativeLocation" class="form-select">
-                <option value="">Select location...</option>
-                <option>Ceiling</option><option>North</option><option>Northeast</option>
-                <option>East</option><option>Southeast</option><option>South</option>
-                <option>Southwest</option><option>West</option><option>Northwest</option>
-              </select>
-            </div>
-            <div class="col-md-6">
               <label for="nativeResponsible" class="form-label">Issue Category</label>
               <select id="nativeResponsible" class="form-select" onchange="toggleNativeOther('nativeResponsible', 'nativeResponsibleOther')">
                 <option value="">Select issue category...</option>
@@ -346,16 +337,6 @@
               <input type="text" id="nativeResponsibleOther" class="form-control mt-2" placeholder="Enter issue category" style="display:none;">
             </div>
             <div class="col-md-6">
-              <label for="nativeStakeholder" class="form-label">Payment responsibility:</label>
-              <select id="nativeStakeholder" class="form-select" onchange="toggleNativeOther('nativeStakeholder', 'nativeStakeholderOther')">
-                <option value="">Select stakeholder...</option>
-                <option>LSVB - OAG</option><option>LSVB - THC</option><option>LVSB - SORM</option>
-                <option>LVSB - TDLR</option><option>NCSB - TREC</option><option>NCSB - TDLR</option>
-                <option>NCSB - DPS</option><option value="Other">Other</option>
-              </select>
-              <input type="text" id="nativeStakeholderOther" class="form-control mt-2" placeholder="Enter stakeholder" style="display:none;">
-            </div>
-            <div class="col-md-6">
               <label for="nativeRepairType" class="form-label">Repair Type</label>
               <select id="nativeRepairType" class="form-select" onchange="applyRepairPrice()">
                 <option value="">Select repair type...</option>
@@ -366,7 +347,7 @@
               <input type="text" id="nativePrice" class="form-control" inputmode="decimal" placeholder="Optional">
             </div>
             <div class="col-12">
-              <label for="nativeIssue" class="form-label">Issue</label>
+              <label for="nativeIssue" class="form-label">Description</label>
               <input type="text" id="nativeIssue" class="form-control">
             </div>
             <div class="col-12">
@@ -1119,11 +1100,8 @@ function showNativeObservation(obsId, user, replace, details) {
   document.getElementById('nativeUserOther').value = user && document.getElementById('nativeUserSelect').value === 'Other' ? user : '';
   toggleNativeOther('nativeUserSelect', 'nativeUserOther');
   document.getElementById('nativeRoom').value = '';
-  document.getElementById('nativeLocation').value = '';
   document.getElementById('nativeResponsible').value = '';
   document.getElementById('nativeResponsibleOther').value = '';
-  document.getElementById('nativeStakeholder').value = '';
-  document.getElementById('nativeStakeholderOther').value = '';
   document.getElementById('nativePrice').value = '';
   document.getElementById('nativeRepairType').value = '';
   loadRepairTypes();
@@ -1132,7 +1110,6 @@ function showNativeObservation(obsId, user, replace, details) {
   document.getElementById('nativePhotoPreview').innerHTML = '';
   if (details) {
     document.getElementById('nativeRoom').value = details.room || '';
-    document.getElementById('nativeLocation').value = details.location_within_room || '';
     document.getElementById('nativeIssue').value = details.issue || '';
     document.getElementById('nativePrice').value = details.price || '';
     loadRepairTypes().then(() => {
@@ -1149,7 +1126,6 @@ function showNativeObservation(obsId, user, replace, details) {
     };
     setNativeSelect('nativeUserSelect', 'nativeUserOther', details.user || '');
     setNativeSelect('nativeResponsible', 'nativeResponsibleOther', details.responsible || '');
-    setNativeSelect('nativeStakeholder', 'nativeStakeholderOther', details.stakeholder || '');
   }
   const nativeStatus = document.getElementById('nativeObservationStatus');
   nativeStatus.textContent = '';
@@ -1227,8 +1203,6 @@ async function submitNativeObservation() {
   const user = userSelect === 'Other' ? document.getElementById('nativeUserOther').value.trim() : userSelect;
   const responsibleSelect = document.getElementById('nativeResponsible').value;
   const responsible = responsibleSelect === 'Other' ? document.getElementById('nativeResponsibleOther').value.trim() : responsibleSelect;
-  const stakeholderSelect = document.getElementById('nativeStakeholder').value;
-  const stakeholder = stakeholderSelect === 'Other' ? document.getElementById('nativeStakeholderOther').value.trim() : stakeholderSelect;
   const status = document.getElementById('nativeObservationStatus');
   const submit = document.getElementById('submitNativeObservation');
   const setNativeStatus = (message, type = 'info') => {
@@ -1238,7 +1212,6 @@ async function submitNativeObservation() {
   if (!room) { setNativeStatus('Room is required.', 'warning'); return; }
   if (userSelect === 'Other' && !user) { setNativeStatus('Enter a user name.', 'warning'); return; }
   if (responsibleSelect === 'Other' && !responsible) { setNativeStatus('Enter who is responsible.', 'warning'); return; }
-  if (stakeholderSelect === 'Other' && !stakeholder) { setNativeStatus('Enter a stakeholder.', 'warning'); return; }
   submit.disabled = true;
   setNativeStatus('Compressing photos...');
   const progressIndicator = document.getElementById('nativeObservationProgress');
@@ -1253,9 +1226,7 @@ async function submitNativeObservation() {
     form.append('room', room);
     form.append('issue', issue);
     form.append('user', user);
-    form.append('location_within_room', document.getElementById('nativeLocation').value);
     form.append('responsible', responsible);
-    form.append('stakeholder', stakeholder);
     form.append('price', document.getElementById('nativePrice').value.trim());
     form.append('repair_type', document.getElementById('nativeRepairType').value);
     form.append('replace', document.getElementById('nativeReplace').value);

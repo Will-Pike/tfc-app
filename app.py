@@ -483,9 +483,9 @@ def submit_native_observation():
     room = request.form.get('room', '').strip()
     issue = request.form.get('issue', '').strip()
     user = request.form.get('user', '').strip()
-    location_within_room = request.form.get('location_within_room', '').strip()
+    location_within_room = request.form.get('location_within_room')
     responsible = request.form.get('responsible', '').strip()
-    stakeholder = request.form.get('stakeholder', '').strip()
+    stakeholder = request.form.get('stakeholder')
     price = request.form.get('price', '').strip()
     repair_type = request.form.get('repair_type', '').strip()
     replace = request.form.get('replace') == 'true'
@@ -509,9 +509,13 @@ def submit_native_observation():
         observation_data = {
                 'building': building, 'floor': floor, 'room': room,
             'issue': issue, 'user': user,
-            'location_within_room': location_within_room,
-            'responsible': responsible, 'stakeholder': stakeholder,
+            'responsible': responsible,
             'price': price, 'repair_type': repair_type}
+        # Omitted so edits never blank existing values in the sheet.
+        if location_within_room is not None:
+            observation_data['location_within_room'] = location_within_room.strip()
+        if stakeholder is not None:
+            observation_data['stakeholder'] = stakeholder.strip()
         if replace:
             if photo_urls:
                 observation_data['photo_urls'] = ', '.join(photo_urls)
