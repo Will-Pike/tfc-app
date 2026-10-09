@@ -75,6 +75,29 @@ def load_rows():
     print(f"[timing] sheets get_all_records: {time.perf_counter() - t0:.2f}s ({len(rows)} rows)")
     return rows
 
+# Lookup sheet of repair types and their price estimates (columns: name, cost).
+REPAIR_SPREADSHEET_ID = os.getenv("REPAIR_SPREADSHEET_ID", "1awGHGbOUR-bXWiC98KpA0BJ0bO5QftLhkE2b-kYnpD8")
+REPAIR_TYPE_COLUMN = os.getenv("REPAIR_TYPE_COLUMN", "Repair Type")
+_REPAIR_CACHE_TTL = 300
+_repair_cache = {"at": 0.0, "items": []}
+
+def get_repair_types():
+    """[{name, price}] from the repair lookup sheet, cached briefly."""
+    now = time.time()
+    if _repair_cache["items"] and now - _repair_cache["at"] < _REPAIR_CACHE_TTL:
+        return _repair_cache["items"]
+    creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_FILE, _SHEETS_SCOPE)
+    sheet = gspread.authorize(creds).open_by_key(REPAIR_SPREADSHEET_ID).sheet1
+    items = []
+    for row in sheet.get_all_values()[1:]:
+        name = str(row[0]).strip() if row else ""
+        if not name:
+            continue
+        price = str(row[1]).replace('$', '').replace(',', '').strip() if len(row) > 1 else ""
+        items.append({"name": name, "price": price})
+    _repair_cache.update(at=now, items=items)
+    return items
+
 # Debug mode - set to False in production to avoid filling disk
 DEBUG_HTML = os.getenv('DEBUG_HTML', 'False').lower() == 'true'
 
@@ -903,6 +926,7 @@ def get_obs_list_for_project(project):
                     "responsible": row.get("Who is responsible?", ""),
                     "photo_url": row.get("Upload photo:", ""),
                     "price": price,
+                    "repair_type": row.get(REPAIR_TYPE_COLUMN, ""),
                     "needs_price": price == ""
                 })
 
@@ -954,6 +978,7 @@ def get_obs_details(project, obs_id, rows=None):
                     "issue": row.get("Issue:", ""),
                     "responsible": row.get("Who is responsible?", ""),
                     "stakeholder": row.get("Stakeholder", ""),
+                    "repair_type": row.get(REPAIR_TYPE_COLUMN, ""),
                     "price": str(row.get(PRICE_COLUMN, "")).strip(),
                     "photo_url": photo_url
                 }
@@ -1038,6 +1063,8 @@ def update_obs_in_spreadsheet(project, obs_id, updated_data):
                     sheet.update_cell(row_index, column_map['Issue:'], updated_data['issue'])
                 if 'price' in updated_data and PRICE_COLUMN in column_map:
                     sheet.update_cell(row_index, column_map[PRICE_COLUMN], updated_data['price'])
+                if 'repair_type' in updated_data and REPAIR_TYPE_COLUMN in column_map:
+                    sheet.update_cell(row_index, column_map[REPAIR_TYPE_COLUMN], updated_data['repair_type'])
                 if 'responsible' in updated_data and 'Who is responsible?' in column_map:
                     sheet.update_cell(row_index, column_map['Who is responsible?'], updated_data['responsible'])
                 if 'stakeholder' in updated_data and 'Stakeholder' in column_map:
@@ -1086,6 +1113,7 @@ def append_obs_to_spreadsheet(project, obs_id, data, photo_urls=None):
             'Who is responsible?': data.get('responsible', ''),
             'Stakeholder': data.get('stakeholder', ''),
             PRICE_COLUMN: data.get('price', ''),
+            REPAIR_TYPE_COLUMN: data.get('repair_type', ''),
             'Upload photo:': ', '.join(photo_urls or [])
         }
         normalized_values = {key.rstrip(':').strip(): value for key, value in values.items()}

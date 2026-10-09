@@ -332,9 +332,9 @@
               </select>
             </div>
             <div class="col-md-6">
-              <label for="nativeResponsible" class="form-label">Issue Type</label>
+              <label for="nativeResponsible" class="form-label">Issue Category</label>
               <select id="nativeResponsible" class="form-select" onchange="toggleNativeOther('nativeResponsible', 'nativeResponsibleOther')">
-                <option value="">Select issue type...</option>
+                <option value="">Select issue category...</option>
                 <option>Non-defined</option>
                 <option>Water Damage</option>
                 <option>Furniture Changes</option>
@@ -343,7 +343,7 @@
                 <option>Out of Sequence</option>
                 <option value="Other">Other</option>
               </select>
-              <input type="text" id="nativeResponsibleOther" class="form-control mt-2" placeholder="Enter issue type" style="display:none;">
+              <input type="text" id="nativeResponsibleOther" class="form-control mt-2" placeholder="Enter issue category" style="display:none;">
             </div>
             <div class="col-md-6">
               <label for="nativeStakeholder" class="form-label">Payment responsibility:</label>
@@ -354,6 +354,12 @@
                 <option>NCSB - DPS</option><option value="Other">Other</option>
               </select>
               <input type="text" id="nativeStakeholderOther" class="form-control mt-2" placeholder="Enter stakeholder" style="display:none;">
+            </div>
+            <div class="col-md-6">
+              <label for="nativeRepairType" class="form-label">Repair Type</label>
+              <select id="nativeRepairType" class="form-select" onchange="applyRepairPrice()">
+                <option value="">Select repair type...</option>
+              </select>
             </div>
             <div class="col-md-6">
               <label for="nativePrice" class="form-label">Price Estimate</label>
@@ -1119,6 +1125,8 @@ function showNativeObservation(obsId, user, replace, details) {
   document.getElementById('nativeStakeholder').value = '';
   document.getElementById('nativeStakeholderOther').value = '';
   document.getElementById('nativePrice').value = '';
+  document.getElementById('nativeRepairType').value = '';
+  loadRepairTypes();
   document.getElementById('nativeIssue').value = '';
   document.getElementById('nativePhotos').value = '';
   document.getElementById('nativePhotoPreview').innerHTML = '';
@@ -1127,6 +1135,10 @@ function showNativeObservation(obsId, user, replace, details) {
     document.getElementById('nativeLocation').value = details.location_within_room || '';
     document.getElementById('nativeIssue').value = details.issue || '';
     document.getElementById('nativePrice').value = details.price || '';
+    loadRepairTypes().then(() => {
+      const sel = document.getElementById('nativeRepairType');
+      if (details.repair_type && [...sel.options].some(o => o.value === details.repair_type)) sel.value = details.repair_type;
+    });
 
     const setNativeSelect = (selectId, otherId, value) => {
       const select = document.getElementById(selectId);
@@ -1145,6 +1157,32 @@ function showNativeObservation(obsId, user, replace, details) {
   document.getElementById('nativeObservationProgress').style.display = 'none';
   document.getElementById('submitNativeObservation').disabled = false;
   getNativeObservationModal().show();
+}
+
+let repairTypes = [];
+let repairTypesPromise = null;
+
+function loadRepairTypes() {
+  if (repairTypesPromise) return repairTypesPromise;
+  repairTypesPromise = fetch('/get_repair_types')
+    .then(r => r.json())
+    .then(data => {
+      repairTypes = data.repair_types || [];
+      const sel = document.getElementById('nativeRepairType');
+      repairTypes.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.name;
+        opt.textContent = item.name;
+        sel.appendChild(opt);
+      });
+    })
+    .catch(err => { console.error('Could not load repair types:', err); repairTypesPromise = null; });
+  return repairTypesPromise;
+}
+
+function applyRepairPrice() {
+  const item = repairTypes.find(r => r.name === document.getElementById('nativeRepairType').value);
+  if (item) document.getElementById('nativePrice').value = item.price;
 }
 
 function toggleNativeOther(selectId, otherId) {
@@ -1219,6 +1257,7 @@ async function submitNativeObservation() {
     form.append('responsible', responsible);
     form.append('stakeholder', stakeholder);
     form.append('price', document.getElementById('nativePrice').value.trim());
+    form.append('repair_type', document.getElementById('nativeRepairType').value);
     form.append('replace', document.getElementById('nativeReplace').value);
     files.forEach(file => form.append('photos', file));
     setNativeStatus(files.length ? 'Uploading photos and saving...' : 'Saving observation...');

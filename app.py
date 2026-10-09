@@ -464,6 +464,15 @@ def start_native_observation():
         print(f"Error starting native observation: {e}")
         return jsonify({"error": "Failed to start observation"}), 500
 
+@app.route('/get_repair_types')
+def get_repair_types_route():
+    try:
+        from generate_pdf import get_repair_types
+        return jsonify({"repair_types": get_repair_types()})
+    except Exception as e:
+        print(f"Error loading repair types: {e}")
+        return jsonify({"error": "Failed to load repair types"}), 500
+
 @app.route('/submit_native_observation', methods=['POST'])
 def submit_native_observation():
     """Upload compressed photos and append the completed native observation."""
@@ -478,6 +487,7 @@ def submit_native_observation():
     responsible = request.form.get('responsible', '').strip()
     stakeholder = request.form.get('stakeholder', '').strip()
     price = request.form.get('price', '').strip()
+    repair_type = request.form.get('repair_type', '').strip()
     replace = request.form.get('replace') == 'true'
     if not project or project not in get_projects() or not obs_id or building not in get_buildings() or not floor or not room:
         return jsonify({"error": "Building, floor, and room are required."}), 400
@@ -501,7 +511,7 @@ def submit_native_observation():
             'issue': issue, 'user': user,
             'location_within_room': location_within_room,
             'responsible': responsible, 'stakeholder': stakeholder,
-            'price': price}
+            'price': price, 'repair_type': repair_type}
         if replace:
             if photo_urls:
                 observation_data['photo_urls'] = ', '.join(photo_urls)

@@ -229,6 +229,13 @@
           </div>
 
           <div class="mb-3">
+            <label for="editRepairType" class="form-label">Repair Type:</label>
+            <select class="form-select" id="editRepairType" onchange="applyEditRepairPrice()">
+              <option value="">Select repair type...</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
             <label for="editPrice" class="form-label">Price Estimate:</label>
             <div class="input-group">
               <span class="input-group-text">$</span>
@@ -300,6 +307,17 @@ const BUILDINGS = {{ buildings|tojson }};
 let obsCache = [];
 const desktopChanges = new Map();
 const ISSUE_TYPES = ['Non-defined', 'Water Damage', 'Furniture Changes', 'Mechanical Changes', 'TI/Core Changes', 'Out of Sequence'];
+let repairTypes = [];
+
+function repairPrice(name) {
+  const item = repairTypes.find(r => r.name === name);
+  return item ? item.price : null;
+}
+
+function applyEditRepairPrice() {
+  const price = repairPrice(document.getElementById('editRepairType').value);
+  if (price !== null) document.getElementById('editPrice').value = price;
+}
 
 document.addEventListener('DOMContentLoaded', function() {
   const btn = document.getElementById('menuBtn');
@@ -314,7 +332,19 @@ document.addEventListener('DOMContentLoaded', function() {
     opt.value = name; opt.textContent = name;
     sel.appendChild(opt);
   });
-  loadObsList();
+  fetch('/get_repair_types')
+    .then(r => r.json())
+    .then(data => {
+      repairTypes = data.repair_types || [];
+      const repairSel = document.getElementById('editRepairType');
+      repairTypes.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.name; opt.textContent = item.name;
+        repairSel.appendChild(opt);
+      });
+    })
+    .catch(err => console.error('Could not load repair types:', err))
+    .finally(loadObsList);
 });
 
 function loadObsList() {
@@ -463,6 +493,9 @@ function renderDesktopObsList() {
       .join('');
     const otherValue = issueType && !ISSUE_TYPES.includes(issueType) ? issueType : '';
     const otherHtml = `<input type="text" class="form-control mt-2 desktop-other-issue" value="${otherValue}" placeholder="Enter issue type" style="display:${otherValue ? 'block' : 'none'};">`;
+    const repairOptions = ['<option value="">Select repair type...</option>']
+      .concat(repairTypes.map(r => `<option value="${r.name}"${obs.repair_type === r.name ? ' selected' : ''}>${r.name}</option>`))
+      .join('');
     const loc = [obs.building, obs.floor ? 'Floor ' + obs.floor : '', obs.room].filter(Boolean).join(' · ');
 
     item.innerHTML = `
@@ -482,6 +515,8 @@ function renderDesktopObsList() {
         <label class="form-label" for="desktop-issue-${obs.obs_id}">Issue Type</label>
         <select class="form-select desktop-issue-select" id="desktop-issue-${obs.obs_id}">${issueOptions}</select>
         ${otherHtml}
+        <label class="form-label" for="desktop-repair-${obs.obs_id}">Repair Type</label>
+        <select class="form-select desktop-repair-select" id="desktop-repair-${obs.obs_id}">${repairOptions}</select>
         <label class="form-label" for="desktop-price-${obs.obs_id}">Price Estimate</label>
         <div class="input-group">
           <span class="input-group-text">$</span>
@@ -493,6 +528,13 @@ function renderDesktopObsList() {
     const issueSelect = item.querySelector('.desktop-issue-select');
     const otherInput = item.querySelector('.desktop-other-issue');
     const priceInput = item.querySelector('.desktop-price-input');
+    const repairSelect = item.querySelector('.desktop-repair-select');
+    repairSelect.addEventListener('click', event => event.stopPropagation());
+    repairSelect.addEventListener('change', () => {
+      const price = repairPrice(repairSelect.value);
+      if (price !== null) priceInput.value = price;
+      markDesktopChange(obs.obs_id, item);
+    });
     issueSelect.addEventListener('click', event => event.stopPropagation());
     priceInput.addEventListener('click', event => event.stopPropagation());
     otherInput.addEventListener('click', event => event.stopPropagation());
@@ -524,7 +566,7 @@ function markDesktopChange(obsId, card) {
   const other = card.querySelector('.desktop-other-issue');
   const price = card.querySelector('.desktop-price-input');
   const issueType = select.value === 'Other' ? other.value.trim() : select.value;
-  desktopChanges.set(obsId, { issueType, price: price.value.trim() });
+  desktopChanges.set(obsId, { issueType, price: price.value.trim(), repairType: card.querySelector('.desktop-repair-select').value });
   document.getElementById('desktopSaveStatus').textContent = `${desktopChanges.size} report(s) changed`;
 }
 
@@ -545,7 +587,7 @@ async function saveDesktopChanges() {
   const results = await Promise.allSettled(changes.map(([obsId, change]) => fetch('/update_obs', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ project: PROJECT, obs_id: obsId, responsible: change.issueType, price: change.price })
+    body: JSON.stringify({ project: PROJECT, obs_id: obsId, responsible: change.issueType, price: change.price, repair_type: change.repairType })
   }).then(response => response.json().then(data => ({ response, data })))));
   const failed = results.filter(result => result.status === 'rejected' || !result.value.response.ok || !result.value.data.success);
   if (failed.length) {
@@ -578,6 +620,7 @@ function loadObsDetails(obsId) {
       document.getElementById('editRoom').value = data.room || '';
       document.getElementById('editIssue').value = data.issue || '';
       document.getElementById('editPrice').value = data.price || '';
+      document.getElementById('editRepairType').value = data.repair_type || '';
 
       const stakeholder = data.stakeholder || '';
       const stakeholderOptions = [...document.getElementById('editStakeholder').options].map(option => option.value);
@@ -703,6 +746,7 @@ function saveChanges() {
     room: document.getElementById('editRoom').value,
     issue: document.getElementById('editIssue').value,
     price: document.getElementById('editPrice').value.trim(),
+    repair_type: document.getElementById('editRepairType').value,
     responsible: finalResponsible,
     stakeholder: finalStakeholder
   };
