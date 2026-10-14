@@ -105,6 +105,12 @@ IMAGE_MAX_DIM = int(os.getenv('REPORT_IMAGE_MAX_DIM', '1600'))
 IMAGE_JPEG_QUALITY = int(os.getenv('REPORT_IMAGE_JPEG_QUALITY', '75'))
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()  # lets Pillow open iPhone HEIC photos
+except ImportError:
+    print("pillow-heif not installed; HEIC photos will be skipped in reports")
+
 def compress_image(image_path):
     with Image.open(image_path) as img:
         # Apply the camera's EXIF orientation to the pixels (and drop the tag),
