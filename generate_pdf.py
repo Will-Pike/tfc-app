@@ -633,25 +633,13 @@ ISSUE_MATRIX_TYPES = [
     'Mechanical Changes', 'TI/Core Changes', 'Out of Sequence', 'Other'
 ]
 
-def generate_issue_matrix_for_project(project, start_date=None, end_date=None, building=None, floor=None, selected_types=None):
-    """Generate a compact Issue Matrix CSV using the existing report filters.
-    selected_types limits the report to those issue types (rows and columns); None means all."""
-    import csv
+def issue_category(row):
+    stored = str(row.get('Who is responsible?', '') or '').strip()
+    return stored if stored in ISSUE_MATRIX_TYPES[:-1] else ('Other' if stored else 'Non-defined')
+
+def filter_report_rows(rows, project, start_date=None, end_date=None, building=None, floor=None, issue_types=None):
+    """Rows matching the report filters; issue_types=None skips the issue type filter."""
     from datetime import datetime
-
-    def _category(row):
-        stored = str(row.get('Who is responsible?', '') or '').strip()
-        return stored if stored in ISSUE_MATRIX_TYPES[:-1] else ('Other' if stored else 'Non-defined')
-
-    issue_types = [t for t in ISSUE_MATRIX_TYPES if selected_types is None or t in selected_types]
-    if not issue_types:
-        raise ValueError("No issue types selected for the issue matrix")
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_FILE, scope)
-    client = gspread.authorize(creds)
-    sheet = client.open_by_key(SPREADSHEET_ID).sheet1
-    rows = sheet.get_all_records()
-
     start_dt = datetime.strptime(start_date, "%Y-%m-%d") if start_date else None
     end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59) if end_date else None
     filtered_rows = []
@@ -673,9 +661,26 @@ def generate_issue_matrix_for_project(project, start_date=None, end_date=None, b
                     continue
             if row_dt is None or (start_dt and row_dt < start_dt) or (end_dt and row_dt > end_dt):
                 continue
-        if _category(row) not in issue_types:
+        if issue_types is not None and issue_category(row) not in issue_types:
             continue
         filtered_rows.append(row)
+    return filtered_rows
+
+def count_report_matches(project, start_date, end_date, building=None, floor=None, issue_types=None):
+    return len(filter_report_rows(load_rows(), project, start_date, end_date, building, floor, issue_types))
+
+def generate_issue_matrix_for_project(project, start_date=None, end_date=None, building=None, floor=None, selected_types=None):
+    """Generate a compact Issue Matrix CSV using the existing report filters.
+    selected_types limits the report to those issue types (rows and columns); None means all."""
+    import csv
+
+    _category = issue_category
+
+    issue_types = [t for t in ISSUE_MATRIX_TYPES if selected_types is None or t in selected_types]
+    if not issue_types:
+        raise ValueError("No issue types selected for the issue matrix")
+    filtered_rows = filter_report_rows(
+        load_rows(), project, start_date, end_date, building, floor, issue_types)
 
     if not filtered_rows:
         scope_desc = project

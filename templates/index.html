@@ -120,6 +120,7 @@
 
         <button class="btn btn-secondary pdf-button" onclick="showDateRangePicker()">Generate Reports</button>
         <div id="reportStatus" class="status"></div>
+        <button type="button" id="cancelReportBtn" class="btn btn-outline-danger" style="display:none; margin-top:10px; width:100%;" onclick="cancelReport()">Cancel report generation</button>
 
         <div id="downloadSection" style="display:none; margin-top:20px;">
           <div id="downloadMessage" class="alert alert-success" role="alert">Reports are ready for download!</div>
@@ -1461,24 +1462,48 @@ function confirmDateRange() {
   if (reportTypes.length === 0) { alert('Please select at least one report to generate'); return; }
   const issueTypes = Array.from(document.querySelectorAll('.issue-type-cb:checked')).map(cb => cb.value);
   if (reportTypes.includes('issue_matrix') && issueTypes.length === 0) { alert('Please select at least one issue type'); return; }
-  dateRangeModal.hide();
-  document.getElementById('downloadSection').style.display = 'none';
-  document.getElementById('downloadPdfBtn').style.display = 'none';
-  document.getElementById('downloadCsvBtn').style.display = 'none';
-  document.getElementById('downloadIssueMatrixBtn').style.display = 'none';
-  document.getElementById('reportStatus').textContent = "Generating reports...";
-  document.getElementById('progressContainer').style.display = '';
-  startFakeProgressBar(10);
+  const generateBtn = document.querySelector('#dateRangeModal .modal-footer .btn-primary');
+  generateBtn.disabled = true;
   fetch('/generate_reports', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ project: PROJECT, start_date: startDate, end_date: endDate, building: building, floor: floor, report_types: reportTypes, issue_types: issueTypes })
   })
   .then(res => res.json())
   .then(data => {
-    if (data.job_id) { pollReportsStatus(data.job_id); }
-    else { document.getElementById('reportStatus').textContent = "Failed to start report generation."; document.getElementById('progressContainer').style.display = 'none'; }
+    generateBtn.disabled = false;
+    if (!data.job_id) { alert(data.error || "Failed to start report generation."); return; }
+    dateRangeModal.hide();
+    document.getElementById('downloadSection').style.display = 'none';
+    document.getElementById('downloadPdfBtn').style.display = 'none';
+    document.getElementById('downloadCsvBtn').style.display = 'none';
+    document.getElementById('downloadIssueMatrixBtn').style.display = 'none';
+    document.getElementById('reportStatus').textContent = "Generating reports...";
+    document.getElementById('progressContainer').style.display = '';
+    startFakeProgressBar(10);
+    currentReportJobId = data.job_id;
+    document.getElementById('cancelReportBtn').style.display = reportTypes.includes('pdf') ? '' : 'none';
+    pollReportsStatus(data.job_id);
   })
-  .catch(err => { document.getElementById('reportStatus').textContent = "Error: " + err.message; document.getElementById('progressContainer').style.display = 'none'; });
+  .catch(err => { generateBtn.disabled = false; alert("Error: " + err.message); });
+}
+let currentReportJobId = null;
+function cancelReport() {
+  if (!currentReportJobId || !confirm('Cancel this report generation?')) return;
+  const jobId = currentReportJobId;
+  document.getElementById('cancelReportBtn').disabled = true;
+  fetch(`/cancel_report/${jobId}`, { method: 'POST' })
+    .then(res => res.json())
+    .then(data => {
+      document.getElementById('cancelReportBtn').disabled = false;
+      if (data.error) { alert(data.error); return; }
+      if (data.status === 'finished') return; // finished first; the poll will show the results
+      currentReportJobId = null;
+      clearInterval(progressInterval);
+      document.getElementById('cancelReportBtn').style.display = 'none';
+      document.getElementById('progressContainer').style.display = 'none';
+      document.getElementById('reportStatus').textContent = "Report generation canceled.";
+    })
+    .catch(err => { document.getElementById('cancelReportBtn').disabled = false; alert("Error: " + err.message); });
 }
 const REPORT_TYPE_BUTTONS = { pdf: 'downloadPdfBtn', csv: 'downloadCsvBtn', issue_matrix: 'downloadIssueMatrixBtn' };
 function showDownloadButton(type, url) {
@@ -1499,7 +1524,18 @@ function pollReportsStatus(job_id) {
     .then(res => res.json())
     .then(data => {
       const requested = data.report_types || ['pdf', 'csv', 'issue_matrix'];
+      if (job_id !== currentReportJobId) return; // superseded or canceled
       hideUnrequestedDownloadButtons(requested);
+      if (data.status === "finished" || data.status === "failed" || data.status === "canceled") {
+        currentReportJobId = null;
+        document.getElementById('cancelReportBtn').style.display = 'none';
+      }
+      if (data.status === "canceled") {
+        clearInterval(progressInterval);
+        document.getElementById('progressContainer').style.display = 'none';
+        document.getElementById('reportStatus').textContent = "Report generation canceled.";
+        return;
+      }
       if (data.status === "queued") {
         clearInterval(progressInterval);
         document.getElementById('progressContainer').style.display = 'none';

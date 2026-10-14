@@ -628,6 +628,33 @@ def download_report(job_id):
         return "Report not found or not ready.", 404
 
 VALID_REPORT_TYPES = {'pdf', 'csv', 'issue_matrix'}
+NO_MATCHES_MESSAGE = "There are no OBS reports that meet the criteria you selected in this date range."
+CANCELED_KEY = "report:canceled:{}"
+
+@app.route('/cancel_report/<job_id>', methods=['POST'])
+def cancel_report(job_id):
+    """Cancel a queued report job, or stop it if the worker is already running it."""
+    from rq.command import send_stop_job_command
+    try:
+        job = Job.fetch(job_id, connection=redis_conn)
+    except Exception:
+        return jsonify({"error": "Report job not found"}), 404
+
+    status = job.get_status(refresh=True)
+    if status in ('finished', 'failed', 'stopped', 'canceled'):
+        return jsonify({"status": status})
+    try:
+        # Flag first: the worker's own meta writes can't clobber a separate key.
+        redis_conn.set(CANCELED_KEY.format(job_id), '1', ex=86400)
+        if status == 'started':
+            send_stop_job_command(redis_conn, job_id)
+        else:
+            job.cancel()
+        return jsonify({"status": "canceled"})
+    except Exception as e:
+        print(f"Error canceling report {job_id}: {e}")
+        redis_conn.delete(CANCELED_KEY.format(job_id))
+        return jsonify({"error": "Could not cancel the report"}), 500
 
 @app.route('/generate_reports', methods=['POST'])
 def generate_reports():
@@ -673,6 +700,22 @@ def generate_reports():
     if not report_types:
         return jsonify({"error": "At least one report type must be selected"}), 400
 
+    # Fail fast instead of queuing a job that would produce nothing.
+    try:
+        from generate_pdf import load_rows, filter_report_rows
+        rows = load_rows()
+        base = (project, start_date, end_date, building, floor)
+        has_rows = bool(filter_report_rows(rows, *base))
+        if has_rows and 'issue_matrix' in report_types and issue_types is not None:
+            has_rows = bool(filter_report_rows(rows, *base, issue_types=issue_types))
+    except ValueError:
+        return jsonify({"error": "Invalid date format"}), 400
+    except Exception as e:
+        print(f"Error checking report criteria: {e}")
+        return jsonify({"error": "Could not check the spreadsheet. Please try again."}), 500
+    if not has_rows:
+        return jsonify({"error": NO_MATCHES_MESSAGE, "no_matches": True}), 400
+
     try:
         job_id = str(uuid.uuid4())
         job = task_queue.enqueue_call(
@@ -702,6 +745,16 @@ def reports_status(job_id):
 
     meta = job.meta or {}
     report_types = meta.get('report_types', list(VALID_REPORT_TYPES))
+
+    if redis_conn.exists(CANCELED_KEY.format(job_id)):
+        csv_path = meta.get('csv_path')
+        matrix_path = meta.get('issue_matrix_path')
+        return jsonify({
+            "status": "canceled",
+            "csv_url": f"/download_csv_report/{job_id}" if csv_path else None,
+            "issue_matrix_url": f"/download_issue_matrix/{job_id}" if matrix_path else None,
+            "report_types": report_types
+        })
 
     # Job hasn't started yet (still behind other jobs on the single worker) -
     # report its place in line instead of a misleading 0/0 progress state.
