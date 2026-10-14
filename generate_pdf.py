@@ -628,15 +628,24 @@ def generate_csv_for_project(project, start_date=None, end_date=None, building=N
     
     return output_path
 
-def generate_issue_matrix_for_project(project, start_date=None, end_date=None, building=None, floor=None):
-    """Generate a compact Issue Matrix CSV using the existing report filters."""
+ISSUE_MATRIX_TYPES = [
+    'Non-defined', 'Water Damage', 'Furniture Changes',
+    'Mechanical Changes', 'TI/Core Changes', 'Out of Sequence', 'Other'
+]
+
+def generate_issue_matrix_for_project(project, start_date=None, end_date=None, building=None, floor=None, selected_types=None):
+    """Generate a compact Issue Matrix CSV using the existing report filters.
+    selected_types limits the report to those issue types (rows and columns); None means all."""
     import csv
     from datetime import datetime
 
-    issue_types = [
-        'Non-defined', 'Water Damage', 'Furniture Changes',
-        'Mechanical Changes', 'TI/Core Changes', 'Out of Sequence', 'Other'
-    ]
+    def _category(row):
+        stored = str(row.get('Who is responsible?', '') or '').strip()
+        return stored if stored in ISSUE_MATRIX_TYPES[:-1] else ('Other' if stored else 'Non-defined')
+
+    issue_types = [t for t in ISSUE_MATRIX_TYPES if selected_types is None or t in selected_types]
+    if not issue_types:
+        raise ValueError("No issue types selected for the issue matrix")
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_FILE, scope)
     client = gspread.authorize(creds)
@@ -664,6 +673,8 @@ def generate_issue_matrix_for_project(project, start_date=None, end_date=None, b
                     continue
             if row_dt is None or (start_dt and row_dt < start_dt) or (end_dt and row_dt > end_dt):
                 continue
+        if _category(row) not in issue_types:
+            continue
         filtered_rows.append(row)
 
     if not filtered_rows:
@@ -680,6 +691,8 @@ def generate_issue_matrix_for_project(project, start_date=None, end_date=None, b
         f"Project: {project} | Date range: {start_date or 'All'} to {end_date or 'All'} | "
         f"Building: {building or 'All'} | Floor: {floor or 'All'}"
     )
+    if len(issue_types) < len(ISSUE_MATRIX_TYPES):
+        filter_text += f" | Types: {', '.join(issue_types)}"
     counts = {issue_type: 0 for issue_type in issue_types}
     cost_by_issue_type = {issue_type: 0.0 for issue_type in issue_types}
 
@@ -700,7 +713,7 @@ def generate_issue_matrix_for_project(project, start_date=None, end_date=None, b
         writer.writerow(['OBS ID', 'Floor', 'Room'] + issue_types + ['Caused by'])
         for row in filtered_rows:
             stored_type = str(row.get('Who is responsible?', '') or '').strip()
-            issue_type = stored_type if stored_type in issue_types[:-1] else ('Other' if stored_type else 'Non-defined')
+            issue_type = _category(row)
             counts[issue_type] += 1
             price_value = row.get(PRICE_COLUMN, '')
             has_price = str(price_value).strip() != ''
@@ -722,7 +735,7 @@ def generate_issue_matrix_for_project(project, start_date=None, end_date=None, b
 
     return output_path
 
-def generate_both_reports(project, start_date, end_date, building=None, floor=None, report_types=None):
+def generate_both_reports(project, start_date, end_date, building=None, floor=None, report_types=None, issue_types=None):
     """Generate the selected reports (PDF and/or spreadsheets) for a project with date range.
     building=None/'' includes all buildings; otherwise filters to that building.
     floor=None/'' includes all floors; otherwise filters to that floor within the building.
@@ -776,7 +789,7 @@ def generate_both_reports(project, start_date, end_date, building=None, floor=No
             job.meta['last_updated'] = time.time()
             job.save_meta()
         try:
-            issue_matrix_path = generate_issue_matrix_for_project(project, start_date, end_date, building, floor)
+            issue_matrix_path = generate_issue_matrix_for_project(project, start_date, end_date, building, floor, issue_types)
             with open(debug_file, "a") as df:
                 df.write(f"Issue Matrix generated successfully: {issue_matrix_path}\n")
         except Exception as e:

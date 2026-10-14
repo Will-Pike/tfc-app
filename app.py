@@ -648,6 +648,15 @@ def generate_reports():
         report_types = list(VALID_REPORT_TYPES)
     report_types = [t for t in report_types if t in VALID_REPORT_TYPES]
 
+    # Missing/None means all issue types; only meaningful for the issue matrix.
+    from generate_pdf import ISSUE_MATRIX_TYPES
+    issue_types = data.get('issue_types')
+    if issue_types is not None:
+        if not isinstance(issue_types, list) or any(t not in ISSUE_MATRIX_TYPES for t in issue_types):
+            return jsonify({"error": "Invalid issue types"}), 400
+        if 'issue_matrix' in report_types and not issue_types:
+            return jsonify({"error": "Select at least one issue type"}), 400
+
     if not project or project not in get_projects():
         return jsonify({"error": "Invalid or missing project"}), 400
     if not start_date or not end_date:
@@ -668,7 +677,7 @@ def generate_reports():
         job_id = str(uuid.uuid4())
         job = task_queue.enqueue_call(
             func='generate_pdf.generate_both_reports',
-            args=(project, start_date, end_date, building, floor, report_types),
+            args=(project, start_date, end_date, building, floor, report_types, issue_types),
             job_id=job_id,
             timeout=REPORT_JOB_TIMEOUT,
             meta={'report_types': report_types}

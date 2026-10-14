@@ -256,6 +256,14 @@
             <label class="form-check-label" for="reportTypeIssueMatrix">By Issue Type</label>
           </div>
         </div>
+        <div class="mb-3" id="issueTypeGroup">
+          <label class="form-label d-block">
+            Issue types to include:
+            <a href="#" class="ms-2 small" onclick="setAllIssueTypes(true); return false;">Select all</a>
+            <a href="#" class="ms-2 small" onclick="setAllIssueTypes(false); return false;">Clear</a>
+          </label>
+          <div class="row g-1" id="issueTypeOptions"></div>
+        </div>
         <div class="mb-3">
           <label for="reportBuilding" class="form-label">Building:</label>
           <select id="reportBuilding" class="form-control" onchange="onReportBuildingChange()">
@@ -1406,6 +1414,8 @@ function showDateRangePicker() {
   document.getElementById('reportTypePdf').checked = true;
   document.getElementById('reportTypeCsv').checked = true;
   document.getElementById('reportTypeIssueMatrix').checked = true;
+  setAllIssueTypes(true);
+  updateIssueTypeGroup();
   const today = new Date();
   const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7);
   document.getElementById('endDate').value = today.toISOString().split('T')[0];
@@ -1413,6 +1423,24 @@ function showDateRangePicker() {
   document.getElementById('endDate').max = today.toISOString().split('T')[0];
   document.getElementById('startDate').max = today.toISOString().split('T')[0];
   dateRangeModal.show();
+}
+const REPORT_ISSUE_TYPES = ['Non-defined', 'Water Damage', 'Furniture Changes', 'Mechanical Changes', 'TI/Core Changes', 'Out of Sequence', 'Other'];
+(function buildIssueTypeOptions() {
+  const box = document.getElementById('issueTypeOptions');
+  REPORT_ISSUE_TYPES.forEach((type, i) => {
+    const col = document.createElement('div');
+    col.className = 'col-6';
+    col.innerHTML = `<div class="form-check"><input class="form-check-input issue-type-cb" type="checkbox" id="issueType${i}" value="${type}" checked><label class="form-check-label" for="issueType${i}">${type}</label></div>`;
+    box.appendChild(col);
+  });
+  document.getElementById('reportTypeIssueMatrix').addEventListener('change', updateIssueTypeGroup);
+})();
+function updateIssueTypeGroup() {
+  document.getElementById('issueTypeGroup').style.display =
+    document.getElementById('reportTypeIssueMatrix').checked ? '' : 'none';
+}
+function setAllIssueTypes(checked) {
+  document.querySelectorAll('.issue-type-cb').forEach(cb => { cb.checked = checked; });
 }
 function setDateRange(days) {
   const end = new Date(), start = new Date(); start.setDate(start.getDate() - days);
@@ -1431,6 +1459,8 @@ function confirmDateRange() {
   if (!startDate || !endDate) { alert('Please select both start and end dates'); return; }
   if (new Date(startDate) > new Date(endDate)) { alert('Start date must be before end date'); return; }
   if (reportTypes.length === 0) { alert('Please select at least one report to generate'); return; }
+  const issueTypes = Array.from(document.querySelectorAll('.issue-type-cb:checked')).map(cb => cb.value);
+  if (reportTypes.includes('issue_matrix') && issueTypes.length === 0) { alert('Please select at least one issue type'); return; }
   dateRangeModal.hide();
   document.getElementById('downloadSection').style.display = 'none';
   document.getElementById('downloadPdfBtn').style.display = 'none';
@@ -1441,7 +1471,7 @@ function confirmDateRange() {
   startFakeProgressBar(10);
   fetch('/generate_reports', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ project: PROJECT, start_date: startDate, end_date: endDate, building: building, floor: floor, report_types: reportTypes })
+    body: JSON.stringify({ project: PROJECT, start_date: startDate, end_date: endDate, building: building, floor: floor, report_types: reportTypes, issue_types: issueTypes })
   })
   .then(res => res.json())
   .then(data => {
