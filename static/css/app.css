@@ -120,6 +120,16 @@ h1.text-center::after {
 .btn-primary:hover,
 .btn-success:hover { box-shadow: 0 4px 12px rgba(var(--accent-rgb),.28); }
 
+/* Checkboxes / radios / switches use the brand green instead of Bootstrap blue */
+.form-check-input:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+.form-check-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 .25rem rgba(var(--accent-rgb),.25);
+}
+
 /* Neutral / ghost — secondary actions (Generate Reports, Back) */
 .btn-secondary {
   --bs-btn-color: var(--ink);
