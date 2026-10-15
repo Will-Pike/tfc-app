@@ -253,7 +253,7 @@
               <option>Furniture Changes</option>
               <option>Mechanical Changes</option>
               <option>TI/Core Changes</option>
-              <option>Out of Sequence</option>
+              <option>Trade Damage</option>
               <option value="Other">Other</option>
             </select>
           </div>
@@ -306,7 +306,9 @@ const PROJECT = {{ project|tojson }};
 const BUILDINGS = {{ buildings|tojson }};
 let obsCache = [];
 const desktopChanges = new Map();
-const ISSUE_TYPES = ['Non-defined', 'Water Damage', 'Furniture Changes', 'Mechanical Changes', 'TI/Core Changes', 'Out of Sequence'];
+const ISSUE_TYPES = ['Non-defined', 'Water Damage', 'Furniture Changes', 'Mechanical Changes', 'TI/Core Changes', 'Trade Damage'];
+// Retired from the form, but existing records can still carry it.
+const LEGACY_ISSUE_TYPE = 'Out of Sequence';
 let repairTypes = [];
 
 function repairPrice(name) {
@@ -487,11 +489,12 @@ function renderDesktopObsList() {
       ? `<img src="${photoProxyUrl(firstPhoto)}" alt="Photo for OBS ${obs.obs_id}" loading="lazy" onload="desktopPhotoLoaded()" onerror="desktopPhotoLoaded()">${urls.length > 1 ? `<span class="photo-count">${urls.length} photos</span>` : ''}`
       : '<span class="text-muted small">No photo uploaded</span>';
     const issueType = obs.responsible || '';
+    const cardIssueTypes = issueType === LEGACY_ISSUE_TYPE ? ISSUE_TYPES.concat([LEGACY_ISSUE_TYPE]) : ISSUE_TYPES;
     const issueOptions = ['<option value="">Select issue type...</option>']
-      .concat(ISSUE_TYPES.map(type => `<option value="${type}"${issueType === type ? ' selected' : ''}>${type}</option>`))
-      .concat([`<option value="Other"${issueType && !ISSUE_TYPES.includes(issueType) ? ' selected' : ''}>Other</option>`])
+      .concat(cardIssueTypes.map(type => `<option value="${type}"${issueType === type ? ' selected' : ''}>${type}</option>`))
+      .concat([`<option value="Other"${issueType && !cardIssueTypes.includes(issueType) ? ' selected' : ''}>Other</option>`])
       .join('');
-    const otherValue = issueType && !ISSUE_TYPES.includes(issueType) ? issueType : '';
+    const otherValue = issueType && !cardIssueTypes.includes(issueType) ? issueType : '';
     const otherHtml = `<input type="text" class="form-control mt-2 desktop-other-issue" value="${otherValue}" placeholder="Enter issue type" style="display:${otherValue ? 'block' : 'none'};">`;
     const repairOptions = ['<option value="">Select repair type...</option>']
       .concat(repairTypes.map(r => `<option value="${r.name}"${obs.repair_type === r.name ? ' selected' : ''}>${r.name}</option>`))
@@ -638,7 +641,11 @@ function loadObsDetails(obsId) {
       }
 
       const responsible = data.responsible || '';
-      const known = ['Non-defined', 'Water Damage', 'Furniture Changes', 'Mechanical Changes', 'TI/Core Changes', 'Out of Sequence'];
+      const known = ISSUE_TYPES.concat([LEGACY_ISSUE_TYPE]);
+      if (responsible === LEGACY_ISSUE_TYPE) {
+        const sel = document.getElementById('editResponsible');
+        if (![...sel.options].some(o => o.value === LEGACY_ISSUE_TYPE)) sel.add(new Option(LEGACY_ISSUE_TYPE, LEGACY_ISSUE_TYPE));
+      }
       if (known.includes(responsible)) {
         document.getElementById('editResponsible').value = responsible;
         document.getElementById('otherResponsibleDiv').style.display = 'none';

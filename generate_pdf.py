@@ -630,7 +630,7 @@ def generate_csv_for_project(project, start_date=None, end_date=None, building=N
 
 ISSUE_MATRIX_TYPES = [
     'Non-defined', 'Water Damage', 'Furniture Changes',
-    'Mechanical Changes', 'TI/Core Changes', 'Out of Sequence', 'Other'
+    'Mechanical Changes', 'TI/Core Changes', 'Trade Damage', 'Out of Sequence', 'Other'
 ]
 
 def issue_category(row):

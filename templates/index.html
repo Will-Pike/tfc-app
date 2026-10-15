@@ -340,7 +340,7 @@
                 <option>Furniture Changes</option>
                 <option>Mechanical Changes</option>
                 <option>TI/Core Changes</option>
-                <option>Out of Sequence</option>
+                <option>Trade Damage</option>
                 <option value="Other">Other</option>
               </select>
               <input type="text" id="nativeResponsibleOther" class="form-control mt-2" placeholder="Enter issue category" style="display:none;">
@@ -1425,7 +1425,7 @@ function showDateRangePicker() {
   document.getElementById('startDate').max = today.toISOString().split('T')[0];
   dateRangeModal.show();
 }
-const REPORT_ISSUE_TYPES = ['Non-defined', 'Water Damage', 'Furniture Changes', 'Mechanical Changes', 'TI/Core Changes', 'Out of Sequence', 'Other'];
+const REPORT_ISSUE_TYPES = ['Non-defined', 'Water Damage', 'Furniture Changes', 'Mechanical Changes', 'TI/Core Changes', 'Trade Damage', 'Out of Sequence', 'Other'];
 (function buildIssueTypeOptions() {
   const box = document.getElementById('issueTypeOptions');
   REPORT_ISSUE_TYPES.forEach((type, i) => {
