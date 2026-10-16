@@ -104,7 +104,7 @@ DEBUG_HTML = os.getenv('DEBUG_HTML', 'False').lower() == 'true'
 IMAGE_MAX_DIM = int(os.getenv('REPORT_IMAGE_MAX_DIM', '1600'))
 IMAGE_JPEG_QUALITY = int(os.getenv('REPORT_IMAGE_JPEG_QUALITY', '75'))
 REPORT_RENDER_WORKERS = int(os.getenv('REPORT_WORKERS', '2'))
-REPORT_PHOTO_THREADS = int(os.getenv('REPORT_PHOTO_THREADS', '8'))
+REPORT_PHOTO_THREADS = int(os.getenv('REPORT_PHOTO_THREADS', '3'))
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 try:
@@ -115,6 +115,8 @@ except ImportError:
 
 def compress_image(image_path):
     with Image.open(image_path) as img:
+        # JPEG-only: decode at reduced size to cut peak memory.
+        img.draft("RGB", (IMAGE_MAX_DIM, IMAGE_MAX_DIM))
         # Apply the camera's EXIF orientation to the pixels (and drop the tag),
         # so portrait photos aren't shown rotated in the PDF.
         img = ImageOps.exif_transpose(img)
@@ -436,8 +438,11 @@ def generate_report_for_project(project, start_date=None, end_date=None, buildin
 
         progress_lock = threading.Lock()
         done_count = [0]
+        # Caps records held in memory so photo prep can't outrun rendering.
+        in_flight = threading.Semaphore(REPORT_PHOTO_THREADS + REPORT_RENDER_WORKERS)
 
         def _on_rendered(fut):
+            in_flight.release()
             if fut.exception() or not job:
                 return
             with progress_lock:
@@ -454,13 +459,18 @@ def generate_report_for_project(project, start_date=None, end_date=None, buildin
                 ThreadPoolExecutor(max_workers=REPORT_PHOTO_THREADS) as photo_pool:
 
             def _prepare_and_submit(idx, row):
-                idx, record, t_dl, t_cmp = _prepare(idx, row)
-                html_content = template.render(records=[record])
-                if DEBUG_HTML:
-                    with open(f"debug_{idx+1}.html", "w", encoding="utf-8") as f:
-                        f.write(html_content)
-                output_file = os.path.join(temp_dir, f"report_{idx+1}.pdf")
-                render_fut = render_pool.submit(_render_pdf, html_content, output_file)
+                in_flight.acquire()
+                try:
+                    idx, record, t_dl, t_cmp = _prepare(idx, row)
+                    html_content = template.render(records=[record])
+                    if DEBUG_HTML:
+                        with open(f"debug_{idx+1}.html", "w", encoding="utf-8") as f:
+                            f.write(html_content)
+                    output_file = os.path.join(temp_dir, f"report_{idx+1}.pdf")
+                    render_fut = render_pool.submit(_render_pdf, html_content, output_file)
+                except BaseException:
+                    in_flight.release()
+                    raise
                 render_fut.add_done_callback(_on_rendered)
                 return output_file, record["obs_number"], t_dl, t_cmp, render_fut
 
