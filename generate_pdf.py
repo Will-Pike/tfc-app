@@ -103,6 +103,8 @@ DEBUG_HTML = os.getenv('DEBUG_HTML', 'False').lower() == 'true'
 
 IMAGE_MAX_DIM = int(os.getenv('REPORT_IMAGE_MAX_DIM', '1600'))
 IMAGE_JPEG_QUALITY = int(os.getenv('REPORT_IMAGE_JPEG_QUALITY', '75'))
+REPORT_RENDER_WORKERS = int(os.getenv('REPORT_WORKERS', '2'))
+REPORT_PHOTO_THREADS = int(os.getenv('REPORT_PHOTO_THREADS', '8'))
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 try:
@@ -243,6 +245,13 @@ def get_drive_image_bytes(file_id):
         print(f"Drive image fetch failed for {file_id}: {e}")
         return None, None
 
+def _render_pdf(html_content, output_file):
+    # Lazy import: only render processes need WeasyPrint's native libs.
+    from weasyprint import HTML
+    t0 = time.perf_counter()
+    HTML(string=html_content, base_url=".").write_pdf(output_file)
+    return time.perf_counter() - t0
+
 def _building_slug(building, floor=None):
     """Filename-safe suffix for a building/floor filter, or '' for all buildings."""
     if not building:
@@ -360,7 +369,8 @@ def generate_report_for_project(project, start_date=None, end_date=None, buildin
         job.save_meta()
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        for idx, row in enumerate(matching_rows):
+        def _prepare(idx, row):
+            t_dl = t_cmp = 0.0
             issue_type = row.get("Issue:", "")
             # Price is now entered directly on the form (blank allowed); no index lookup.
             cost = str(row.get(PRICE_COLUMN, "")).strip()
@@ -398,14 +408,19 @@ def generate_report_for_project(project, start_date=None, end_date=None, buildin
                         file_id = photo_url.split("id=")[-1].split('&')[0]  # Handle additional parameters
                         temp_img_path = os.path.join(temp_dir, f"photo_{idx+1}_{photo_idx+1}.jpg")
 
-                        if not download_drive_image(file_id, temp_img_path):
+                        t0 = time.perf_counter()
+                        ok = download_drive_image(file_id, temp_img_path)
+                        t_dl += time.perf_counter() - t0
+                        if not ok:
                             continue
 
                         # Re-encode as JPEG. This both compresses and validates the
                         # bytes are a real image — if it fails, skip the photo
                         # rather than embed an unreadable file (blank box in PDF).
+                        t0 = time.perf_counter()
                         try:
                             compress_image(temp_img_path)
+                            t_cmp += time.perf_counter() - t0
                         except Exception as e:
                             print(f"⚠️ OBS {record['obs_number']} photo {photo_idx+1} is not a valid image, skipping: {e}")
                             continue
@@ -413,35 +428,58 @@ def generate_report_for_project(project, start_date=None, end_date=None, buildin
                         record["photo_paths"].append(f"file:///{temp_img_path.replace(os.sep, '/')}")
                         print(f"✅ Downloaded photo {photo_idx+1} for OBS {record['obs_number']}")
             
-            html_content = template.render(records=[record])
+            return idx, record, t_dl, t_cmp
             
-            # Debug HTML (only in debug mode)
-            if DEBUG_HTML:
-                with open(f"debug_{idx+1}.html", "w", encoding="utf-8") as f:
-                    f.write(html_content)
 
-            output_file = os.path.join(temp_dir, f"report_{idx+1}.pdf")
-            try:
-                # Imported lazily: only the RQ worker renders PDFs, so the web
-                # process can run without WeasyPrint's native libs installed.
-                from weasyprint import HTML
-                HTML(string=html_content, base_url=".").write_pdf(output_file)
+        import multiprocessing
+        from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+
+        progress_lock = threading.Lock()
+        done_count = [0]
+
+        def _on_rendered(fut):
+            if fut.exception() or not job:
+                return
+            with progress_lock:
+                done_count[0] += 1
+                job.meta['processed'] = done_count[0]
+                job.meta['last_updated'] = time.time()
+                job.save_meta()
+                print(f"Progress: {done_count[0]}/{total_records} PDFs generated")
+
+        t_start = time.perf_counter()
+        # spawn: forking after threads exist is unsafe.
+        with ProcessPoolExecutor(max_workers=REPORT_RENDER_WORKERS,
+                                 mp_context=multiprocessing.get_context("spawn")) as render_pool, \
+                ThreadPoolExecutor(max_workers=REPORT_PHOTO_THREADS) as photo_pool:
+
+            def _prepare_and_submit(idx, row):
+                idx, record, t_dl, t_cmp = _prepare(idx, row)
+                html_content = template.render(records=[record])
+                if DEBUG_HTML:
+                    with open(f"debug_{idx+1}.html", "w", encoding="utf-8") as f:
+                        f.write(html_content)
+                output_file = os.path.join(temp_dir, f"report_{idx+1}.pdf")
+                render_fut = render_pool.submit(_render_pdf, html_content, output_file)
+                render_fut.add_done_callback(_on_rendered)
+                return output_file, record["obs_number"], t_dl, t_cmp, render_fut
+
+            prep_futs = [photo_pool.submit(_prepare_and_submit, i, r)
+                         for i, r in enumerate(matching_rows)]
+            sum_dl = sum_cmp = sum_render = 0.0
+            for fut in prep_futs:
+                output_file, obs_number, t_dl, t_cmp, render_fut = fut.result()
+                try:
+                    sum_render += render_fut.result()
+                except OSError as e:
+                    print(f"❌ PDF generation failed for OBS {obs_number}: {e}")
+                    raise
+                sum_dl += t_dl
+                sum_cmp += t_cmp
                 pdf_files.append(output_file)
-                
-                # Update progress
-                if job:
-                    job.meta['processed'] = idx + 1
-                    job.meta['last_updated'] = time.time()  # Add timestamp for heartbeat
-                    job.save_meta()
-                    print(f"Progress: {idx + 1}/{total_records} PDFs generated")
-            except OSError as e:
-                print(f"❌ PDF generation failed for OBS {record['obs_number']}: {e}")
-                # Save HTML for debugging
-                debug_html_path = f"debug_failed_{record['obs_number']}.html"
-                with open(debug_html_path, "w", encoding="utf-8") as f:
-                    f.write(html_content)
-                print(f"   Debug HTML saved to: {debug_html_path}")
-                raise  # Re-raise to see full error
+
+        print(f"[timing] {total_records} records in {time.perf_counter() - t_start:.1f}s wall; "
+              f"summed: download {sum_dl:.1f}s, compress {sum_cmp:.1f}s, render {sum_render:.1f}s")
 
         print(f"📄 Merging {len(pdf_files)} PDFs into final report...")
         
