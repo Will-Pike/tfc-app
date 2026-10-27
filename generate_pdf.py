@@ -60,6 +60,7 @@ def _get_sheet(force_new=False):
             t0 = time.perf_counter()
             creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_FILE, _SHEETS_SCOPE)
             client = gspread.authorize(creds)
+            client.set_timeout(30)  # a stalled Sheets call must not hang the request forever
             _sheet_cache = client.open_by_key(SPREADSHEET_ID).sheet1
             print(f"[timing] sheets auth+open: {time.perf_counter() - t0:.2f}s")
         return _sheet_cache
@@ -263,7 +264,18 @@ def _building_slug(building, floor=None):
         slug += f"_F{floor}"
     return slug
 
-def generate_report_for_project(project, start_date=None, end_date=None, building=None, floor=None):
+def obs_sequence(value):
+    import re
+    match = re.search(r"(\d+)\s*$", str(value or ""))
+    return int(match.group(1)) if match else None
+
+def obs_id_in_range(value, obs_start=None, obs_end=None):
+    sequence = obs_sequence(value)
+    if sequence is None:
+        return False
+    return (obs_start is None or sequence >= obs_sequence(obs_start)) and (obs_end is None or sequence <= obs_sequence(obs_end))
+
+def generate_report_for_project(project, start_date=None, end_date=None, building=None, floor=None, obs_start=None, obs_end=None):
     # Write debug to a file that we can check
     debug_file = "/tmp/schnurr_debug.log"
     
@@ -304,9 +316,9 @@ def generate_report_for_project(project, start_date=None, end_date=None, buildin
     from datetime import datetime
     start_dt = None
     end_dt = None
-    if start_date:
+    if start_date and not (obs_start or obs_end):
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-    if end_date:
+    if end_date and not (obs_start or obs_end):
         # Set end date to end of day
         end_dt = datetime.strptime(end_date, "%Y-%m-%d")
         end_dt = end_dt.replace(hour=23, minute=59, second=59)
@@ -326,6 +338,9 @@ def generate_report_for_project(project, start_date=None, end_date=None, buildin
 
         # Filter by floor if provided (empty/None => all floors)
         if floor and str(row.get("Floor:", "")) != str(floor):
+            continue
+
+        if (obs_start or obs_end) and not obs_id_in_range(row.get("OBS ID#", ""), obs_start, obs_end):
             continue
 
         # Filter by date range if provided
@@ -566,7 +581,7 @@ def generate_report_for_project(project, start_date=None, end_date=None, buildin
 
         return output_path
 
-def generate_csv_for_project(project, start_date=None, end_date=None, building=None, floor=None):
+def generate_csv_for_project(project, start_date=None, end_date=None, building=None, floor=None, obs_start=None, obs_end=None):
     """Generate CSV file for a project with optional date range"""
     import csv
     from datetime import datetime
@@ -597,6 +612,8 @@ def generate_csv_for_project(project, start_date=None, end_date=None, building=N
     except ValueError:
         pass  # If no timestamp column, skip date filtering
 
+    obs_col_idx = headers.index("OBS ID#") if "OBS ID#" in headers else None
+
     # Find building column index for building filtering
     building_col_idx = None
     try:
@@ -614,9 +631,9 @@ def generate_csv_for_project(project, start_date=None, end_date=None, building=N
     # Parse date range if provided
     start_dt = None
     end_dt = None
-    if start_date:
+    if start_date and not (obs_start or obs_end):
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-    if end_date:
+    if end_date and not (obs_start or obs_end):
         end_dt = datetime.strptime(end_date, "%Y-%m-%d")
         end_dt = end_dt.replace(hour=23, minute=59, second=59)
     
@@ -636,6 +653,11 @@ def generate_csv_for_project(project, start_date=None, end_date=None, building=N
         if floor and floor_col_idx is not None:
             row_floor = row[floor_col_idx] if len(row) > floor_col_idx else ""
             if str(row_floor) != str(floor):
+                continue
+
+        if (obs_start or obs_end) and obs_col_idx is not None:
+            row_obs_id = row[obs_col_idx] if len(row) > obs_col_idx else ""
+            if not obs_id_in_range(row_obs_id, obs_start, obs_end):
                 continue
 
         # Filter by date if timestamp column exists and date range provided
@@ -685,7 +707,7 @@ def issue_category(row):
     stored = str(row.get('Who is responsible?', '') or '').strip()
     return stored if stored in ISSUE_MATRIX_TYPES[:-1] else ('Other' if stored else 'Non-defined')
 
-def filter_report_rows(rows, project, start_date=None, end_date=None, building=None, floor=None, issue_types=None):
+def filter_report_rows(rows, project, start_date=None, end_date=None, building=None, floor=None, issue_types=None, obs_start=None, obs_end=None):
     """Rows matching the report filters; issue_types=None skips the issue type filter."""
     from datetime import datetime
     start_dt = datetime.strptime(start_date, "%Y-%m-%d") if start_date else None
@@ -698,7 +720,9 @@ def filter_report_rows(rows, project, start_date=None, end_date=None, building=N
             continue
         if floor and str(row.get('Floor:', '')) != str(floor):
             continue
-        if start_dt or end_dt:
+        if (obs_start or obs_end) and not obs_id_in_range(row.get('OBS ID#', ''), obs_start, obs_end):
+            continue
+        if (start_dt or end_dt) and not (obs_start or obs_end):
             timestamp = row.get('Timestamp', '')
             row_dt = None
             for timestamp_format in ("%m/%d/%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
@@ -714,10 +738,10 @@ def filter_report_rows(rows, project, start_date=None, end_date=None, building=N
         filtered_rows.append(row)
     return filtered_rows
 
-def count_report_matches(project, start_date, end_date, building=None, floor=None, issue_types=None):
-    return len(filter_report_rows(load_rows(), project, start_date, end_date, building, floor, issue_types))
+def count_report_matches(project, start_date=None, end_date=None, building=None, floor=None, issue_types=None, obs_start=None, obs_end=None):
+    return len(filter_report_rows(load_rows(), project, start_date, end_date, building, floor, issue_types, obs_start, obs_end))
 
-def generate_issue_matrix_for_project(project, start_date=None, end_date=None, building=None, floor=None, selected_types=None):
+def generate_issue_matrix_for_project(project, start_date=None, end_date=None, building=None, floor=None, selected_types=None, obs_start=None, obs_end=None):
     """Generate a compact Issue Matrix CSV using the existing report filters.
     selected_types limits the report to those issue types (rows and columns); None means all."""
     import csv
@@ -728,7 +752,7 @@ def generate_issue_matrix_for_project(project, start_date=None, end_date=None, b
     if not issue_types:
         raise ValueError("No issue types selected for the issue matrix")
     filtered_rows = filter_report_rows(
-        load_rows(), project, start_date, end_date, building, floor, issue_types)
+        load_rows(), project, start_date, end_date, building, floor, issue_types, obs_start, obs_end)
 
     if not filtered_rows:
         scope_desc = project
@@ -740,10 +764,9 @@ def generate_issue_matrix_for_project(project, start_date=None, end_date=None, b
 
     output_filename = f"report_{project.replace(' ', '_').replace('.', '')}{_building_slug(building, floor)}_issue_matrix.csv"
     output_path = os.path.abspath(output_filename)
-    filter_text = (
-        f"Project: {project} | Date range: {start_date or 'All'} to {end_date or 'All'} | "
-        f"Building: {building or 'All'} | Floor: {floor or 'All'}"
-    )
+    selected_range = (f"OBS ID range: {obs_start or 'Beginning'} to {obs_end or 'Latest'}" if obs_start or obs_end
+                      else f"Date range: {start_date or 'All'} to {end_date or 'All'}")
+    filter_text = f"Project: {project} | {selected_range} | Building: {building or 'All'} | Floor: {floor or 'All'}"
     if len(issue_types) < len(ISSUE_MATRIX_TYPES):
         filter_text += f" | Types: {', '.join(issue_types)}"
     counts = {issue_type: 0 for issue_type in issue_types}
@@ -788,7 +811,7 @@ def generate_issue_matrix_for_project(project, start_date=None, end_date=None, b
 
     return output_path
 
-def generate_both_reports(project, start_date, end_date, building=None, floor=None, report_types=None, issue_types=None):
+def generate_both_reports(project, start_date=None, end_date=None, building=None, floor=None, report_types=None, issue_types=None, obs_start=None, obs_end=None):
     """Generate the selected reports (PDF and/or spreadsheets) for a project with date range.
     building=None/'' includes all buildings; otherwise filters to that building.
     floor=None/'' includes all floors; otherwise filters to that floor within the building.
@@ -823,7 +846,7 @@ def generate_both_reports(project, start_date, end_date, building=None, floor=No
             job.meta['last_updated'] = time.time()
             job.save_meta()
         try:
-            csv_path = generate_csv_for_project(project, start_date, end_date, building, floor)
+            csv_path = generate_csv_for_project(project, start_date, end_date, building, floor, obs_start, obs_end)
             with open(debug_file, "a") as df:
                 df.write(f"CSV generated successfully: {csv_path}\n")
         except Exception as e:
@@ -842,7 +865,7 @@ def generate_both_reports(project, start_date, end_date, building=None, floor=No
             job.meta['last_updated'] = time.time()
             job.save_meta()
         try:
-            issue_matrix_path = generate_issue_matrix_for_project(project, start_date, end_date, building, floor, issue_types)
+            issue_matrix_path = generate_issue_matrix_for_project(project, start_date, end_date, building, floor, issue_types, obs_start, obs_end)
             with open(debug_file, "a") as df:
                 df.write(f"Issue Matrix generated successfully: {issue_matrix_path}\n")
         except Exception as e:
@@ -864,7 +887,7 @@ def generate_both_reports(project, start_date, end_date, building=None, floor=No
             with open(debug_file, "a") as df:
                 df.write(f"Job metadata set: status=generating_pdfs\n")
         try:
-            pdf_path = generate_report_for_project(project, start_date, end_date, building, floor)
+            pdf_path = generate_report_for_project(project, start_date, end_date, building, floor, obs_start, obs_end)
             with open(debug_file, "a") as df:
                 df.write(f"PDF generated successfully: {pdf_path}\n")
         except Exception as e:

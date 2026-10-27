@@ -238,10 +238,49 @@
   <div class="modal-dialog">
     <div id="dateRangeModalContent" class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Select Date Range</h5>
+        <h5 class="modal-title">Select Report Range</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
+        <ul class="nav nav-tabs mb-3" id="reportRangeTabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="byDateTab" data-bs-toggle="tab" data-bs-target="#byDatePanel" type="button" role="tab" aria-controls="byDatePanel" aria-selected="true">By Date</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="byObsIdTab" data-bs-toggle="tab" data-bs-target="#byObsIdPanel" type="button" role="tab" aria-controls="byObsIdPanel" aria-selected="false">By OBS ID</button>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane fade show active" id="byDatePanel" role="tabpanel" aria-labelledby="byDateTab">
+            <div class="mb-3">
+              <label for="startDate" class="form-label">Start Date:</label>
+              <input type="date" id="startDate" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label for="endDate" class="form-label">End Date:</label>
+              <input type="date" id="endDate" class="form-control" required>
+            </div>
+            <div class="text-muted small mb-3">
+              <p>Quick selects:</p>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setDateRange(7)">Last 7 days</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setDateRange(30)">Last 30 days</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setDateRange(90)">Last 90 days</button>
+            </div>
+          </div>
+          <div class="tab-pane fade" id="byObsIdPanel" role="tabpanel" aria-labelledby="byObsIdTab">
+            <div class="row g-2 mb-3">
+              <div class="col-6">
+                <label for="obsIdStart" class="form-label">Starting OBS ID</label>
+                <input type="text" id="obsIdStart" class="form-control" placeholder="TFC-LV2-58 or 58" autocomplete="off">
+              </div>
+              <div class="col-6">
+                <label for="obsIdEnd" class="form-label">Ending OBS ID</label>
+                <input type="text" id="obsIdEnd" class="form-control" placeholder="TFC-LV2-414 or 414" autocomplete="off">
+              </div>
+            </div>
+            <div class="text-muted small mb-3">Enter full OBS IDs or just their trailing numbers. The range includes both ends.</div>
+          </div>
+        </div>
         <div class="mb-3">
           <label class="form-label d-block">Reports to generate:</label>
           <div class="form-check form-check-inline">
@@ -276,20 +315,6 @@
           <select id="reportFloor" class="form-control">
             <option value="">All Floors</option>
           </select>
-        </div>
-        <div class="mb-3">
-          <label for="startDate" class="form-label">Start Date:</label>
-          <input type="date" id="startDate" class="form-control" required>
-        </div>
-        <div class="mb-3">
-          <label for="endDate" class="form-label">End Date:</label>
-          <input type="date" id="endDate" class="form-control" required>
-        </div>
-        <div class="text-muted small">
-          <p>Quick selects:</p>
-          <button class="btn btn-sm btn-outline-secondary" onclick="setDateRange(7)">Last 7 days</button>
-          <button class="btn btn-sm btn-outline-secondary" onclick="setDateRange(30)">Last 30 days</button>
-          <button class="btn btn-sm btn-outline-secondary" onclick="setDateRange(90)">Last 90 days</button>
         </div>
       </div>
       <div class="modal-footer">
@@ -1412,6 +1437,7 @@ function onReportBuildingChange() {
 function showDateRangePicker() {
   if (!dateRangeModal) dateRangeModal = new bootstrap.Modal(document.getElementById('dateRangeModal'));
   populateReportBuildings();
+  bootstrap.Tab.getOrCreateInstance(document.getElementById('byDateTab')).show();
   document.getElementById('reportTypePdf').checked = true;
   document.getElementById('reportTypeCsv').checked = true;
   document.getElementById('reportTypeIssueMatrix').checked = true;
@@ -1451,14 +1477,18 @@ function setDateRange(days) {
 function confirmDateRange() {
   const startDate = document.getElementById('startDate').value;
   const endDate = document.getElementById('endDate').value;
+  const rangeType = document.getElementById('byObsIdTab').classList.contains('active') ? 'obs_id' : 'date';
+  const obsStart = document.getElementById('obsIdStart').value.trim();
+  const obsEnd = document.getElementById('obsIdEnd').value.trim();
   const building = document.getElementById('reportBuilding').value;
   const floor = document.getElementById('reportFloor').value;
   const reportTypes = [];
   if (document.getElementById('reportTypePdf').checked) reportTypes.push('pdf');
   if (document.getElementById('reportTypeCsv').checked) reportTypes.push('csv');
   if (document.getElementById('reportTypeIssueMatrix').checked) reportTypes.push('issue_matrix');
-  if (!startDate || !endDate) { alert('Please select both start and end dates'); return; }
-  if (new Date(startDate) > new Date(endDate)) { alert('Start date must be before end date'); return; }
+  if (rangeType === 'date' && (!startDate || !endDate)) { alert('Please select both start and end dates'); return; }
+  if (rangeType === 'date' && new Date(startDate) > new Date(endDate)) { alert('Start date must be before end date'); return; }
+  if (rangeType === 'obs_id' && (!obsStart || !obsEnd)) { alert('Please enter both the starting and ending OBS IDs'); return; }
   if (reportTypes.length === 0) { alert('Please select at least one report to generate'); return; }
   const issueTypes = Array.from(document.querySelectorAll('.issue-type-cb:checked')).map(cb => cb.value);
   if (reportTypes.includes('issue_matrix') && issueTypes.length === 0) { alert('Please select at least one issue type'); return; }
@@ -1466,7 +1496,7 @@ function confirmDateRange() {
   generateBtn.disabled = true;
   fetch('/generate_reports', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ project: PROJECT, start_date: startDate, end_date: endDate, building: building, floor: floor, report_types: reportTypes, issue_types: issueTypes })
+    body: JSON.stringify({ project: PROJECT, range_type: rangeType, start_date: startDate, end_date: endDate, obs_start: obsStart, obs_end: obsEnd, building: building, floor: floor, report_types: reportTypes, issue_types: issueTypes })
   })
   .then(res => res.json())
   .then(data => {
@@ -1524,6 +1554,7 @@ function pollReportsStatus(job_id) {
     .then(res => res.json())
     .then(data => {
       const requested = data.report_types || ['pdf', 'csv', 'issue_matrix'];
+      pollFailures = 0;
       if (job_id !== currentReportJobId) return; // superseded or canceled
       hideUnrequestedDownloadButtons(requested);
       if (data.status === "finished" || data.status === "failed" || data.status === "canceled") {
@@ -1596,8 +1627,14 @@ function pollReportsStatus(job_id) {
         setTimeout(() => pollReportsStatus(job_id), 2000);
       }
     })
-    .catch(err => { document.getElementById('reportStatus').textContent = "Error checking status: " + err.message; });
+    .catch(err => {
+      if (job_id !== currentReportJobId) return;
+      // A proxy/server hiccup returns HTML, which fails JSON parsing; retry before giving up.
+      if (++pollFailures <= 5) { setTimeout(() => pollReportsStatus(job_id), 2000); return; }
+      document.getElementById('reportStatus').textContent = "Error checking status: " + err.message;
+    });
 }
+let pollFailures = 0;
 </script>
 </body>
 </html>

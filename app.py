@@ -661,8 +661,11 @@ def generate_reports():
     """Generate the selected reports (PDF and/or spreadsheets) for a project with date range"""
     data = request.json
     project = data.get('project')
-    start_date = data.get('start_date')
-    end_date = data.get('end_date')
+    range_type = data.get('range_type', 'date')
+    start_date = data.get('start_date') if range_type == 'date' else None
+    end_date = data.get('end_date') if range_type == 'date' else None
+    obs_start = data.get('obs_start') if range_type == 'obs_id' else None
+    obs_end = data.get('obs_end') if range_type == 'obs_id' else None
     # Empty/missing building means "Both Buildings" (no filter).
     building = data.get('building') or None
     # Empty/missing floor means "All Floors" (no filter). Floor only applies when a building is set.
@@ -686,8 +689,16 @@ def generate_reports():
 
     if not project or project not in get_projects():
         return jsonify({"error": "Invalid or missing project"}), 400
-    if not start_date or not end_date:
+    if range_type not in ('date', 'obs_id'):
+        return jsonify({"error": "Invalid report range type"}), 400
+    if range_type == 'date' and (not start_date or not end_date):
         return jsonify({"error": "Start and end dates are required"}), 400
+    if range_type == 'obs_id':
+        from generate_pdf import obs_sequence
+        if not obs_start or not obs_end or obs_sequence(obs_start) is None or obs_sequence(obs_end) is None:
+            return jsonify({"error": "Enter valid starting and ending OBS IDs or sequence numbers"}), 400
+        if obs_sequence(obs_start) > obs_sequence(obs_end):
+            return jsonify({"error": "Starting OBS ID must not be greater than ending OBS ID"}), 400
     if building and building not in get_buildings():
         return jsonify({"error": "Invalid building"}), 400
     if floor:
@@ -704,10 +715,13 @@ def generate_reports():
     try:
         from generate_pdf import load_rows, filter_report_rows
         rows = load_rows()
-        base = (project, start_date, end_date, building, floor)
-        has_rows = bool(filter_report_rows(rows, *base))
+        has_rows = bool(filter_report_rows(
+            rows, project, start_date, end_date, building, floor,
+            obs_start=obs_start, obs_end=obs_end))
         if has_rows and 'issue_matrix' in report_types and issue_types is not None:
-            has_rows = bool(filter_report_rows(rows, *base, issue_types=issue_types))
+            has_rows = bool(filter_report_rows(
+                rows, project, start_date, end_date, building, floor,
+                issue_types=issue_types, obs_start=obs_start, obs_end=obs_end))
     except ValueError:
         return jsonify({"error": "Invalid date format"}), 400
     except Exception as e:
@@ -720,7 +734,7 @@ def generate_reports():
         job_id = str(uuid.uuid4())
         job = task_queue.enqueue_call(
             func='generate_pdf.generate_both_reports',
-            args=(project, start_date, end_date, building, floor, report_types, issue_types),
+            args=(project, start_date, end_date, building, floor, report_types, issue_types, obs_start, obs_end),
             job_id=job_id,
             timeout=REPORT_JOB_TIMEOUT,
             meta={'report_types': report_types}
@@ -732,6 +746,14 @@ def generate_reports():
 
 @app.route('/reports_status/<job_id>')
 def reports_status(job_id):
+    try:
+        return _reports_status(job_id)
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": "Could not read report status"}), 500
+
+def _reports_status(job_id):
     """Check status of the selected report generation job."""
     try:
         job = Job.fetch(job_id, connection=redis_conn)
