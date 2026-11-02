@@ -806,8 +806,8 @@ def generate_issue_matrix_for_project(project, start_date=None, end_date=None, b
                 + issue_cells
             )
         writer.writerow([])
-        writer.writerow(['Total count', '', ''] + [counts[issue_type] for issue_type in issue_types] + [''])
-        writer.writerow(['Total Cost', '', ''] + [cost_by_issue_type[issue_type] for issue_type in issue_types] + [''])
+        writer.writerow(['Total count', '', '', ''] + [counts[issue_type] for issue_type in issue_types])
+        writer.writerow(['Total Cost', '', '', ''] + [cost_by_issue_type[issue_type] for issue_type in issue_types])
 
     return output_path
 
