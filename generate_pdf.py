@@ -786,7 +786,7 @@ def generate_issue_matrix_for_project(project, start_date=None, end_date=None, b
         writer.writerow(['By Issue Category'] + [''] * (len(issue_types) + 3))
         writer.writerow(['Filters', filter_text] + [''] * (len(issue_types) + 2))
         writer.writerow([])
-        writer.writerow(['OBS ID', 'Floor', 'Room'] + issue_types + ['Caused by'])
+        writer.writerow(['OBS ID', 'Floor', 'Room', 'Description'] + issue_types)
         for row in filtered_rows:
             stored_type = str(row.get('Who is responsible?', '') or '').strip()
             issue_type = _category(row)
@@ -802,8 +802,8 @@ def generate_issue_matrix_for_project(project, start_date=None, end_date=None, b
             ]
             writer.writerow(
                 [row.get('OBS ID#', ''), row.get('Floor:', ''), row.get('Room:', '')]
-                + issue_cells
                 + [stored_type]
+                + issue_cells
             )
         writer.writerow([])
         writer.writerow(['Total count', '', ''] + [counts[issue_type] for issue_type in issue_types] + [''])
